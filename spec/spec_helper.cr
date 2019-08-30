@@ -1,2 +1,2 @@
 require "spec"
-require "../src/cadmium_classifiers"
+require "../src/cadmium_classifier"
