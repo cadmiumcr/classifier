@@ -6,7 +6,7 @@ describe Cadmium::BayesClassifier do
   describe "#initialize" do
     it "successfully initalizes all defaults" do
       classifier = subject.new
-      classifier.tokenizer.should be_a(Cadmium::WordTokenizer)
+      classifier.tokenizer.should be_a(Cadmium::Word)
       classifier.vocabulary.should eq([] of String)
       classifier.total_documents.should eq(0)
       classifier.doc_count.should eq({} of String => Int32)
@@ -16,8 +16,8 @@ describe Cadmium::BayesClassifier do
     end
 
     it "uses a custom tokenizer" do
-      classifier = subject.new(tokenizer: Cadmium::AggressiveTokenizer.new(lang: :en))
-      classifier.tokenizer.should be_a(Cadmium::AggressiveTokenizer)
+      classifier = subject.new(tokenizer: Cadmium::Aggressive.new(lang: :en))
+      classifier.tokenizer.should be_a(Cadmium::Aggressive)
     end
   end
 
