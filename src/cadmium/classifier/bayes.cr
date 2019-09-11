@@ -47,7 +47,7 @@ module Cadmium
 
     @[JSON::Field(ignore: true)]
     @[YAML::Field(ignore: true)]
-    property tokenizer : Cadmium::Tokenizer = DEFAULT_TOKENIZER
+    property tokenizer : Cadmium::Tokenizer::Base
 
     # The words to learn from.
     getter vocabulary : Array(String)
@@ -69,7 +69,7 @@ module Cadmium
     getter categories : Array(String)
 
     def initialize(tokenizer = nil)
-      @tokenizer = tokenizer if tokenizer
+      @tokenizer = tokenizer || DEFAULT_TOKENIZER
       @vocabulary = [] of String
       @total_documents = 0
       @doc_count = {} of String => Int32
