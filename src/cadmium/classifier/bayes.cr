@@ -43,7 +43,7 @@ module Cadmium
     include JSON::Serializable
     include YAML::Serializable
 
-    DEFAULT_TOKENIZER = Cadmium::Word.new
+    DEFAULT_TOKENIZER = Cadmium::Tokenizer::Word.new
 
     @[JSON::Field(ignore: true)]
     @[YAML::Field(ignore: true)]
