@@ -52,6 +52,9 @@ module Cadmium
     # The words to learn from.
     getter vocabulary : Array(String)
 
+    # The total number of words in the vocabulary
+    getter vocabulary_size : Int32
+
     # Number of documents we have learned from.
     getter total_documents : Int32
 
@@ -71,6 +74,7 @@ module Cadmium
     def initialize(tokenizer = nil)
       @tokenizer = tokenizer if tokenizer
       @vocabulary = [] of String
+      @vocabulary_size = 0
       @total_documents = 0
       @doc_count = {} of String => Int32
       @word_count = {} of String => Int32
@@ -131,6 +135,8 @@ module Cadmium
         @word_count[category] += frequency
       end
 
+      @vocabulary_size = @vocabulary.size
+
       self
     end
 
@@ -182,7 +188,7 @@ module Cadmium
       word_count = @word_count[category]
 
       # Use Laplace Add-1 Smoothing equation
-      (word_freq.to_f64 + 1_f64) / (word_count.to_f64 + @vocabulary.size.to_f64)
+      (word_freq.to_f64 + 1_f64) / (word_count.to_f64 + @vocabulary_size.to_f64)
     end
 
     # Build a frequency hash map where

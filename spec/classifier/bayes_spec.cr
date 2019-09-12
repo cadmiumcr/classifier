@@ -8,6 +8,7 @@ describe Cadmium::BayesClassifier do
       classifier = subject.new
       classifier.tokenizer.should be_a(Cadmium::Tokenizer::Word)
       classifier.vocabulary.should eq([] of String)
+      classifier.vocabulary_size.should eq(0)
       classifier.total_documents.should eq(0)
       classifier.doc_count.should eq({} of String => Int32)
       classifier.word_count.should eq({} of String => Int32)
@@ -99,7 +100,7 @@ describe Cadmium::BayesClassifier do
   end
 
   describe "json serialization and deserialization" do
-    classifier_json = "{\"vocabulary\":[\"crystal\",\"is\",\"an\",\"awesome\",\"programming\",\"language\",\"ruby\",\"nice\",\"but\",\"not\",\"as\",\"fast\",\"my\",\"wife\",\"and\",\"I\",\"went\",\"to\",\"the\",\"beach\",\"dog\",\"likes\",\"go\",\"outside\",\"play\"],\"total_documents\":4,\"doc_count\":{\"programming\":2,\"off-topic\":2},\"word_count\":{\"programming\":15,\"off-topic\":16},\"word_frequency_count\":{\"programming\":{\"crystal\":2,\"is\":2,\"an\":1,\"awesome\":1,\"programming\":1,\"language\":1,\"ruby\":1,\"nice\":1,\"but\":1,\"not\":1,\"as\":2,\"fast\":1},\"off-topic\":{\"my\":2,\"wife\":1,\"and\":2,\"I\":1,\"went\":1,\"to\":2,\"the\":1,\"beach\":1,\"dog\":1,\"likes\":1,\"go\":1,\"outside\":1,\"play\":1}},\"categories\":[\"programming\",\"off-topic\"]}"
+    classifier_json = "{\"vocabulary\":[\"crystal\",\"is\",\"an\",\"awesome\",\"programming\",\"language\",\"ruby\",\"nice\",\"but\",\"not\",\"as\",\"fast\",\"my\",\"wife\",\"and\",\"I\",\"went\",\"to\",\"the\",\"beach\",\"dog\",\"likes\",\"go\",\"outside\",\"play\"],\"vocabulary_size\":25,\"total_documents\":4,\"doc_count\":{\"programming\":2,\"off-topic\":2},\"word_count\":{\"programming\":15,\"off-topic\":16},\"word_frequency_count\":{\"programming\":{\"crystal\":2,\"is\":2,\"an\":1,\"awesome\":1,\"programming\":1,\"language\":1,\"ruby\":1,\"nice\":1,\"but\":1,\"not\":1,\"as\":2,\"fast\":1},\"off-topic\":{\"my\":2,\"wife\":1,\"and\":2,\"I\":1,\"went\":1,\"to\":2,\"the\":1,\"beach\":1,\"dog\":1,\"likes\":1,\"go\":1,\"outside\":1,\"play\":1}},\"categories\":[\"programming\",\"off-topic\"]}"
 
     it "exports a trained set to a json document" do
       classifier = subject.new
@@ -120,7 +121,7 @@ describe Cadmium::BayesClassifier do
   end
 
   describe "yaml serialization and deserialization" do
-    classifier_yaml = "---\nvocabulary:\n- crystal\n- is\n- an\n- awesome\n- programming\n- language\n- ruby\n- nice\n- but\n- not\n- as\n- fast\n- my\n- wife\n- and\n- I\n- went\n- to\n- the\n- beach\n- dog\n- likes\n- go\n- outside\n- play\ntotal_documents: 4\ndoc_count:\n  programming: 2\n  off-topic: 2\nword_count:\n  programming: 15\n  off-topic: 16\nword_frequency_count:\n  programming:\n    crystal: 2\n    is: 2\n    an: 1\n    awesome: 1\n    programming: 1\n    language: 1\n    ruby: 1\n    nice: 1\n    but: 1\n    not: 1\n    as: 2\n    fast: 1\n  off-topic:\n    my: 2\n    wife: 1\n    and: 2\n    I: 1\n    went: 1\n    to: 2\n    the: 1\n    beach: 1\n    dog: 1\n    likes: 1\n    go: 1\n    outside: 1\n    play: 1\ncategories:\n- programming\n- off-topic\n"
+    classifier_yaml = "---\nvocabulary:\n- crystal\n- is\n- an\n- awesome\n- programming\n- language\n- ruby\n- nice\n- but\n- not\n- as\n- fast\n- my\n- wife\n- and\n- I\n- went\n- to\n- the\n- beach\n- dog\n- likes\n- go\n- outside\n- play\nvocabulary_size: 25\ntotal_documents: 4\ndoc_count:\n  programming: 2\n  off-topic: 2\nword_count:\n  programming: 15\n  off-topic: 16\nword_frequency_count:\n  programming:\n    crystal: 2\n    is: 2\n    an: 1\n    awesome: 1\n    programming: 1\n    language: 1\n    ruby: 1\n    nice: 1\n    but: 1\n    not: 1\n    as: 2\n    fast: 1\n  off-topic:\n    my: 2\n    wife: 1\n    and: 2\n    I: 1\n    went: 1\n    to: 2\n    the: 1\n    beach: 1\n    dog: 1\n    likes: 1\n    go: 1\n    outside: 1\n    play: 1\ncategories:\n- programming\n- off-topic\n"
 
     it "exports a trained set to a yaml document" do
       classifier = subject.new
