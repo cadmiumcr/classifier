@@ -1,7 +1,7 @@
 require "../spec_helper"
 
-describe Cadmium::BayesClassifier do
-  subject = Cadmium::BayesClassifier
+describe Cadmium::Classifier::Bayes do
+  subject = Cadmium::Classifier::Bayes
 
   describe "#initialize" do
     it "successfully initalizes all defaults" do
