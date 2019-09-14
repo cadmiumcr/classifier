@@ -3,7 +3,7 @@ require "yaml"
 
 module Cadmium
   module Classifier
-    class Base
+    abstract class Base
       include JSON::Serializable
       include YAML::Serializable
 
@@ -12,6 +12,8 @@ module Cadmium
       @[JSON::Field(ignore: true)]
       @[YAML::Field(ignore: true)]
       property tokenizer : Cadmium::Tokenizer::Base = DEFAULT_TOKENIZER
+
+      abstract def classify(text : String)
     end
   end
 end

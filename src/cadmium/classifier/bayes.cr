@@ -132,7 +132,7 @@ module Cadmium
       end
 
       # Determines what category the `text` belongs to.
-      def categorize(text)
+      def classify(text : String)
         max_probability = -Float64::INFINITY
         chosen_category = nil
 

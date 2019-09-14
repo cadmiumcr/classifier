@@ -53,8 +53,8 @@ describe Cadmium::Classifier::Bayes do
     end
   end
 
-  describe "#categorize" do
-    it "correctly categorizes `positive` and `negative` categories" do
+  describe "#classify" do
+    it "correctly classifys `positive` and `negative` categories" do
       classifier = subject.new
 
       # teach it positive phrases
@@ -67,11 +67,11 @@ describe Cadmium::Classifier::Bayes do
       # teach it a neutral phrase
       classifier.train("I dont really know what to make of this.", "neutral")
 
-      classifier.categorize("awesome, cool, amazing!! Yay.").should eq("positive")
-      classifier.categorize("This is a damn shitty awful thing!").should eq("negative")
+      classifier.classify("awesome, cool, amazing!! Yay.").should eq("positive")
+      classifier.classify("This is a damn shitty awful thing!").should eq("negative")
     end
 
-    it "correctly categorizes `programming` and `off-topic`" do
+    it "correctly classifys `programming` and `off-topic`" do
       classifier = subject.new
 
       # some programming data
@@ -82,8 +82,8 @@ describe Cadmium::Classifier::Bayes do
       classifier.train("my wife and I went to the beach", "off-topic")
       classifier.train("my dog likes to go outside and play", "off-topic")
 
-      classifier.categorize("this post is about crystal").should eq("programming")
-      classifier.categorize("i don't know what I'm about").should eq("off-topic")
+      classifier.classify("this post is about crystal").should eq("programming")
+      classifier.classify("i don't know what I'm about").should eq("off-topic")
     end
 
     it "handles unicode characters" do
@@ -94,8 +94,8 @@ describe Cadmium::Classifier::Bayes do
       classifier.train("Damn you suck 👎", "negative")
       classifier.train("You are such a 💩 head", "negative")
 
-      classifier.categorize("I love you 💕").should eq("positive")
-      classifier.categorize("This sucks 👎").should eq("negative")
+      classifier.classify("I love you 💕").should eq("positive")
+      classifier.classify("This sucks 👎").should eq("negative")
     end
   end
 
