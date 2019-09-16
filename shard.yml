@@ -7,7 +7,7 @@ authors:
 crystal: 0.30.1
 
 dependencies:
-  cadmium_tokenizer:
-    github: cadmiumcr/tokenizer
+  cadmium_ngrams:
+    github: cadmiumcr/ngrams
 
 license: MIT
