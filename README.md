@@ -29,7 +29,7 @@ classifier.train("ruby is nice, but not as fast as crystal", "programming")
 classifier.train("my wife and I went to the beach", "off-topic")
 classifier.train("my dog likes to go outside and play", "off-topic")
 
-classifier.categorize("Crystal is my favorite!")
+classifier.classify("Crystal is my favorite!")
 # => "programming"
 ```
 
