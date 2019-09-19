@@ -9,5 +9,8 @@ crystal: 0.30.1
 dependencies:
   cadmium_ngrams:
     github: cadmiumcr/ngrams
+  apatite:
+    github: watzon/apatite
+    branch: master
 
 license: MIT
