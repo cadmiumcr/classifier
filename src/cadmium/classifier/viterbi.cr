@@ -1,4 +1,5 @@
 require "./classifier"
+require "apatite"
 
 module Cadmium
   module Classifier
@@ -8,29 +9,92 @@ module Cadmium
     # Katz smoothing (backoff)
     # Witten-Bell smoothing
     # Absolute discounting
-    # Kneser-Ney smoothing
+    # Kneser-Ney smoothing <= This is the one we need to implement !
+
+    # struct TrainingData
+    #   property data : Hash(String, String) # token => label
+    #   property unique_tokens : Set(String)
+    #   property unique_labels : Set(String)
+    #   property label_to_token_count : Hash(String, Hash(String, Int32))
+
+    #   def all
+    #     @data
+    #   end
+
+    #   def initialize(data : Hash(String, String))
+    #     @data = data
+    #     @unique_tokens = self.ordered_tokens.to_set
+    #     @unique_labels = self.ordered_labels.to_set
+    #     @label_to_token_count = @data.tally
+    #   end
+
+    #   def ordered_tokens
+    #     @data.keys
+    #   end
+
+    #   def ordered_labels
+    #     @data.values
+    #   end
+    # end
 
     class Viterbi < Base
-      @raw_training_data : Hash(String, Hash(String, Int32)) # token_content => {tag => tag_count}
-      @token_count = Hash(String, Int32)                     # Count of given token in the entire corpus
-      @token_tag_count = Hash(Tuple(String), Int32)          # Count of token and tag occurring together.
-      @observation_space : Set(String)                       # Set of unique tokens
-      @state_space : Set(String)                             # Set of unique tags
-      @initial_probabilities
-      property ngrams_size : Int32 = 3
-      @sequence_of_observations : Set(Hash(String, String)) # Set of ngrams goldlabeled
-      @transition_matrix : Matrix(Float64)                  # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
-      @emission_matrix : Matrix(Float64)                    # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      include Apatite
+      getter training_data : Array(Tuple(String, String))           # [] of [token,label]
+      getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
+      getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
+      getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
+      getter observation_space : Set(String)                        # Set of tokens
+      getter state_space : Set(String)                              # Set of labels
+      # property initial_probabilities
+      getter ngrams_size : Int32
+      getter sequence_of_observations : Array(Array(Tuple(String, String)))       # Array of ngrams goldlabeled
+      getter sequence_of_prior_observations : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
+      getter ngram_label_count : Hash(Array(String), Int32)
+      getter prior_ngram_label_count : Hash(Array(String), Int32)
 
-      # Count the occurrence of n tags in a sequence
+      # @transition_matrix : Matrix(Float64)                  # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
+      # @emission_matrix : Matrix(Float64)                    # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+
+      def initialize(tokenizer = DEFAULT_TOKENIZER, ngrams_size = 3)
+        @tokenizer = tokenizer
+        @training_data = Array(Tuple(String, String)).new
+        @token_count = Hash(String, Int32).new
+        @token_label_count = Hash(Tuple(String, String), Int32).new
+        @token_to_label = Hash(String, Array(String | Nil)).new
+        @observation_space = Set(String).new
+        @state_space = Set(String).new
+        # @initial_probabilities
+        @ngrams_size = ngrams_size
+        @sequence_of_observations = Array(Array(Tuple(String, String))).new
+        @sequence_of_prior_observations = Array(Array(Tuple(String, String))).new
+        @ngram_label_count = Hash(Array(String), Int32).new
+        @prior_ngram_label_count = Hash(Array(String), Int32).new
+        # @transition_matrix = Matrix(Float64).new
+        # @emission_matrix = Matrix(Float64).new
+      end
+
+      def train(training_data : Array(Tuple(String, String)))
+        @training_data += training_data
+        @token_count = @training_data.map { |tuple| tuple[0] }.tally
+        @token_label_count = @training_data.tally
+        @observation_space = @training_data.map { |tuple| tuple[0] }.to_set
+        @token_to_label = @observation_space.to_h { |token| {token, @token_label_count.keys.map { |tuple| tuple.skip(1) if tuple.includes?(token) }.flatten.compact!} }
+        @state_space = @training_data.map { |tuple| tuple[1] }.to_set
+        @sequence_of_observations = @training_data.in_groups_of(@ngrams_size, {"", ""})
+        @sequence_of_prior_observations = @sequence_of_observations.map { |ngram| ngram.reverse.skip(1) }
+        @ngram_label_count = @sequence_of_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+        @prior_ngram_label_count = @sequence_of_prior_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+      end
+
+      # Count the occurrence of n labels in a sequence
       # @ngram_counts = {}
 
-      # Count of n-1 tags (prior) in a sequence
+      # Count of n-1 labels (prior) in a sequence
       # prior_ngrams_counts = {}
 
       # A trigram Hidden Markov Model can be defined using
 
-      # A finite set of states. (ie grammatical tags for POS tagging)
+      # A finite set of states. (ie grammatical labels for POS labelging)
       # A sequence of observations. (ie a dataset of trigrams goldlabeled)
       # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
       # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
@@ -98,23 +162,23 @@ module Cadmium
         #   # An iterator over KFoldCrossValidation logic.
         #   self.cycle_iterator = KFoldCrossValidation(ConditionalProbability.k_fold, self.parser.get_training_data())
 
-        #   # Mapping of a word to set of tags it occurred with in the entire corpus
-        #   self.word_to_tag = {}
+        #   # Mapping of a word to set of labels it occurred with in the entire corpus
+        #   self.word_to_label = {}
 
-        #   # Count of word and tag occurring together.
-        #   self.word_tag_count = {}
+        #   # Count of word and label occurring together.
+        #   self.word_label_count = {}
 
         #   # Count of given word in the entire corpus
-        #   self.tag_count = {}
+        #   self.label_count = {}
 
-        #   # Count the occurrence of 3 tags in a sequence
+        #   # Count the occurrence of 3 labels in a sequence
         #   self.trigram_counts = {}
 
-        #   # Count of two tags (prior) in a sequence
+        #   # Count of two labels (prior) in a sequence
         #   self.bigram_counts = {}
 
-        #   # Set of all the tags in the corpus
-        #   self.tags = set()
+        #   # Set of all the labels in the corpus
+        #   self.labels = set()
 
         #   # Set of all the words in the corpus
         #   self.words = set()
