@@ -9,7 +9,7 @@ module Cadmium
     # Example:
     #
     # ```
-    # classifier = Cadmium.bayes_classifier.new
+    # classifier = Cadmium::Classifier::Bayes.new
     #
     # # Train some angry examples
     # classifier.train("omg I can't believe you would do that to me", "angry")
@@ -30,13 +30,13 @@ module Cadmium
     # classifier.train("I guess we could do that", "indifferent")
     #
     # # Now let's test it on a sentence
-    # classifier.categorize("You shit head!")
+    # classifier.classify("You shit head!")
     # # => "angry"
     #
-    # puts classifier.categorize("You're the best :)")
+    # puts classifier.classify("You're the best :)")
     # # => "happy"
     #
-    # classifier.categorize("idk, my bff jill?")
+    # classifier.classify("idk, my bff jill?")
     # # => "indifferent"
     # ```
     class Bayes < Base
