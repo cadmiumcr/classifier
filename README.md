@@ -21,7 +21,7 @@ require "cadmium_classifier"
 ```
 
 ```crystal
-classifier = Cadmium.bayes_classifier.new
+classifier = Cadmium::Classifier::Bayes.new
 
 classifier.train("crystal is an awesome programming language", "programming")
 classifier.train("ruby is nice, but not as fast as crystal", "programming")
