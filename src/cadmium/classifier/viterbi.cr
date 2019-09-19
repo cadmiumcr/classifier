@@ -39,24 +39,42 @@ module Cadmium
 
     class Viterbi < Base
       include Apatite
-      getter training_data : Array(Tuple(String, String))           # [] of [token,label]
-      getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
-      getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
+      getter training_data : Array(Tuple(String, String)) # [] of [token,label]
+      # observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
+      getter token_count : Hash(String, Int32) # Count of given token in the entire corpus
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
+      getter token_to_label : Hash(String, Array(String | Nil)) # Hash mapping each token to one or several labels
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
       getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
       getter observation_space : Set(String)                        # Set of tokens
       getter state_space : Set(String)                              # Set of labels
       # property initial_probabilities
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
       getter ngrams_size : Int32
-      getter sequence_of_observations : Array(Array(Tuple(String, String)))       # Array of ngrams goldlabeled
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
+      getter sequence_of_observations : Array(Array(Tuple(String, String))) # Array of ngrams goldlabeled
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
       getter sequence_of_prior_observations : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
       getter ngram_label_count : Hash(Array(String), Int32)
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
       getter prior_ngram_label_count : Hash(Array(String), Int32)
 
-      # @transition_matrix : Matrix(Float64)                  # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
-      # @emission_matrix : Matrix(Float64)                    # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
+      getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
 
-      def initialize(tokenizer = DEFAULT_TOKENIZER, ngrams_size = 3)
-        @tokenizer = tokenizer
+      def initialize(ngrams_size = 3)
         @training_data = Array(Tuple(String, String)).new
         @token_count = Hash(String, Int32).new
         @token_label_count = Hash(Tuple(String, String), Int32).new
@@ -69,8 +87,8 @@ module Cadmium
         @sequence_of_prior_observations = Array(Array(Tuple(String, String))).new
         @ngram_label_count = Hash(Array(String), Int32).new
         @prior_ngram_label_count = Hash(Array(String), Int32).new
-        # @transition_matrix = Matrix(Float64).new
-        # @emission_matrix = Matrix(Float64).new
+        @transition_matrix = Matrix(Float64).build(1) { 0.0 }
+        @emission_matrix = Matrix(Float64).build(1) { 0.0 }
       end
 
       def train(training_data : Array(Tuple(String, String)))
@@ -81,52 +99,64 @@ module Cadmium
         @token_to_label = @observation_space.to_h { |token| {token, @token_label_count.keys.map { |tuple| tuple.skip(1) if tuple.includes?(token) }.flatten.compact!} }
         @state_space = @training_data.map { |tuple| tuple[1] }.to_set
         @sequence_of_observations = @training_data.in_groups_of(@ngrams_size, {"", ""})
-        @sequence_of_prior_observations = @sequence_of_observations.map { |ngram| ngram.reverse.skip(1) }
+        @sequence_of_prior_observations = @sequence_of_observations.map { |ngram| ngram[...@ngrams_size - 1] }
         @ngram_label_count = @sequence_of_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
         @prior_ngram_label_count = @sequence_of_prior_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+        @transition_matrix = Matrix(Float64).build(@state_space.size) { 0.0 }
+        @emission_matrix = Matrix(Float64).build(@state_space.size, @observation_space.size) { 0.0 }
+        @state_space.each_with_index do |state_1, i|
+          @state_space.each_with_index do |state_2, j|
+            ngram_index = @ngram_label_count.keys.index { |ngram| ngram.join.includes?(state_1 + state_2) }
+            @transition_matrix[i, j] = transition_probability(@ngram_label_count.values[ngram_index], prior_ngram_label_count.fetch([state_1, state_2], 0.0)) unless !ngram_index
+          end
+        end
+        @state_space.each_with_index do |label, i|
+          @observation_space.each_with_index do |token, j|
+            @emission_matrix[i, j] = emission_probability(@token_label_count.fetch({token, label}, 0.0), @token_count.fetch(token, 0.0))
+          end
+        end
       end
 
-      # Count the occurrence of n labels in a sequence
-      # @ngram_counts = {}
+      # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
+      # q(s|u, v) = c(u, v, s) / c(u, v)
+      #   c(u, v, s) represents the ngram count of states u, v and s. Meaning it represents the number of times the n states u, v, ..., and s occurred together in that order in the training corpus.
+      #   c(u, v) following along similar lines as that of the ngram count, this is the n-1gram count of states u and v given the training corpus.
+      def transition_probability(ngram_label_count, prior_ngram_label_count) : Float64
+        (ngram_label_count / (prior_ngram_label_count + 0.000001)).to_f
+      end
 
-      # Count of n-1 labels (prior) in a sequence
-      # prior_ngrams_counts = {}
+      # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      # e(x|s) = c(s → x) / c(s)
+      #   c(s → x) is the number of times in the training set that the state s and observation x are paired with each other.
+      #   c(s) is the prior probability of an observation being labelled as the state s.
+      def emission_probability(token_label_count, token_count) : Float64
+        (token_label_count / token_count).to_f
+      end
 
       # A trigram Hidden Markov Model can be defined using
 
-      # A finite set of states. (ie grammatical labels for POS labelging)
+      # A finite set of states. (ie grammatical labels for POS labelling)
       # A sequence of observations. (ie a dataset of trigrams goldlabeled)
-      # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
-      # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
 
-      # q(s|u, v) = c(u, v, s) / c(u, v)
-
-      # e(x|s) = c(s → x) / c(s)
-
-      #   c(u, v, s) represents the trigram count of states u, v and s. Meaning it represents the number of times the three states u, v and s occurred together in that order in the training corpus.
-      #   c(u, v) following along similar lines as that of the trigram count, this is the bigram count of states u and v given the training corpus.
-      #   c(s → x) is the number of times in the training set that the state s and observation x are paired with each other. And finally,
-      #   c(s) is the prior probability of an observation being labelled as the state s.
-
-      def viterbi(observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
-        observation_space = sequence_of_observations if observation_space.nil?
-        t1, t2 = Vector.zero(2)
-        states_count = state_space.size
-        state_space.each_with_index do |_, i|
-          t1[i, 0] = initial_probabilities[i] * emission_matrix[i, sequence_of_observations.first]
+      def viterbi # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
+        observation_space = @sequence_of_observations if @observation_space.nil?
+        t1, t2 = Vector(Float64).zero(2)
+        states_count = @state_space.size
+        @state_space.each_with_index do |_, i|
+          t1[i][0] = emission_matrix[i][1] # * initial_probabilities[i]
         end
         observation_space.each_with_index(1) do |_, j|
-          state_space.each_with_index do |_, i|
-            t1[i, j] = max(t1[states_count, j - 1] * transition_matrix * emission_matrix)
-            t2[i, j] = arg_max(t1[states_count, j - 1] * transition_matrix) # argmax = enumerable.max_by
+          @state_space.each_with_index do |_, i|
+            t1[i, j] = (t1[..states_count, j - 1] * @transition_matrix[i, j] * @emission_matrix[i, j]).max
+            t2[i, j] = t1.max_by { |k| t1[k, j - 1] * @transition_matrix[i, j] }
           end
         end
-        z = arg_max(t1[states_count, t1.size -1]) # arg_max = enumerable.max_by
+        z = t1.max_by { |k| t1[k, t1.size -1] }
         hidden_state_sequence[t1.size -1] = state_space[z]
 
-        [observation_space.size - 1..2].each do |j|
-          hidden_state_sequence[j - 1] = state_space[t2[]]
-        end
+        # [observation_space.size - 1..2].each do |j|
+        #   hidden_state_sequence[j - 1] = state_space[t2[]]
+        # end
         hidden_state_sequence
       end
 

@@ -12,5 +12,7 @@ dependencies:
   apatite:
     github: watzon/apatite
     branch: master
+  msgpack:
+    github: crystal-community/msgpack-crystal
 
 license: MIT
