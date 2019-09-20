@@ -39,40 +39,23 @@ module Cadmium
 
     class Viterbi < Base
       include Apatite
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
       getter training_data : Array(Tuple(String, String)) # [] of [token,label]
       # observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
-      getter token_count : Hash(String, Int32) # Count of given token in the entire corpus
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
-      getter token_to_label : Hash(String, Array(String | Nil)) # Hash mapping each token to one or several labels
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
+      getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
+      getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
       getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
       getter observation_space : Set(String)                        # Set of tokens
       getter state_space : Set(String)                              # Set of labels
       # property initial_probabilities
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
       getter ngrams_size : Int32
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
-      getter sequence_of_observations : Array(Array(Tuple(String, String))) # Array of ngrams goldlabeled
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
+      getter sequence_of_observations : Array(Array(Tuple(String, String)))       # Array of ngrams goldlabeled
       getter sequence_of_prior_observations : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
       getter ngram_label_count : Hash(Array(String), Int32)
-      @[JSON::Field(ignore: true)]
-      @[YAML::Field(ignore: true)]
       getter prior_ngram_label_count : Hash(Array(String), Int32)
 
       getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
       getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      getter initial_probabilities : Vector(Float64)
 
       def initialize(ngrams_size = 3)
         @training_data = Array(Tuple(String, String)).new
@@ -81,7 +64,6 @@ module Cadmium
         @token_to_label = Hash(String, Array(String | Nil)).new
         @observation_space = Set(String).new
         @state_space = Set(String).new
-        # @initial_probabilities
         @ngrams_size = ngrams_size
         @sequence_of_observations = Array(Array(Tuple(String, String))).new
         @sequence_of_prior_observations = Array(Array(Tuple(String, String))).new
@@ -89,6 +71,7 @@ module Cadmium
         @prior_ngram_label_count = Hash(Array(String), Int32).new
         @transition_matrix = Matrix(Float64).build(1) { 0.0 }
         @emission_matrix = Matrix(Float64).build(1) { 0.0 }
+        @initial_probabilities = Vector(Float64).elements(@state_space.map { |_| (1 / @state_space.size).to_f })
       end
 
       def train(training_data : Array(Tuple(String, String)))
@@ -138,45 +121,48 @@ module Cadmium
       # A finite set of states. (ie grammatical labels for POS labelling)
       # A sequence of observations. (ie a dataset of trigrams goldlabeled)
 
-      def viterbi # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
-        observation_space = @sequence_of_observations if @observation_space.nil?
-        t1, t2 = Vector(Float64).zero(2)
+      def offset(i = 0)
+        i -= 1
+        return 0 if i < 0
+        i
+      end
+
+      def viterbi                                     # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
+        observation_space = @sequence_of_observations # if @observation_space.nil?
+        t1 = Matrix.vstack(@initial_probabilities.to_matrix, Matrix(Float64).build(observation_space.size, @state_space.size - 1) { 0.000001 })
+        t2 = Matrix.vstack(Vector(Float64).elements(@state_space.map { |_| 0.000001 }).to_matrix, Matrix(Float64).build(observation_space.size, @state_space.size - 1) { 0.000001 })
+        t1 = t1.map_with_index { |k, i, j| (t1[..][offset(j)].map { |k2| k2 * @transition_matrix[i, j] * @emission_matrix[i, j] }).max.as(Float64) }
+        t2 = t1.map_with_index { |k, i, j| t1[..][offset(j)].max_by { |k2| k2 * @transition_matrix[i, j] } }
+
+        # t1.each_with_index(1) { |k, i, j| k = (t1[..][j - 1].map { |k2| k2 * @transition_matrix[i, j] * @emission_matrix[i, j] }.max) }
+        # t2.each_with_index(1) { |k, i, j| k = t1[..][j - 1].max_by { |k2| k2 * @transition_matrix[i, j] } }
+        # t2 = Array.new(dim) { |i| Array.new(1) { |j| 0.0 } }
+        # t1 = Array.new(2){ |i|  }
+        # t2 = Array(Array(Float64)).new
         states_count = @state_space.size
-        @state_space.each_with_index do |_, i|
-          t1[i][0] = emission_matrix[i][1] # * initial_probabilities[i]
-        end
-        observation_space.each_with_index(1) do |_, j|
-          @state_space.each_with_index do |_, i|
-            t1[i, j] = (t1[..states_count, j - 1] * @transition_matrix[i, j] * @emission_matrix[i, j]).max
-            t2[i, j] = t1.max_by { |k| t1[k, j - 1] * @transition_matrix[i, j] }
-          end
-        end
-        z = t1.max_by { |k| t1[k, t1.size -1] }
-        hidden_state_sequence[t1.size -1] = state_space[z]
+        return t2
+
+        # @state_space.each_with_index do |_, i|
+        #   t1[i][0] = emission_matrix[i, 1] # * initial_probabilities[i]
+        # end
+        # observation_space.each_with_index(1) do |_, j|
+        #   @state_space.each_with_index do |_, i|
+        #     t1[i][0] = 0.12 # (t1[..][j - 1].map { |k| k * @transition_matrix[i, j] * @emission_matrix[i, j] }).max
+        #     t2[i][0] = 0.1  # t1[..][j - 1].max_by { |k| k * @transition_matrix[i, j] }
+        #   end
+        # end
+        z = t1[..][...].max_by { |k| k }
+        hidden_state_sequence = Array(String).new
+        # hidden_state_sequence[observation_space.size] = observation_space[z]
 
         # [observation_space.size - 1..2].each do |j|
         #   hidden_state_sequence[j - 1] = state_space[t2[]]
         # end
-        hidden_state_sequence
-      end
-
-      #       Smoothing
-
-      # The idea behind Smoothing is just this:
-
-      # 1.    Discount — the existing probability values somewhat and
-      # 2.    Reallocate — this probability to the zeroes
-
-      def smoothing
+        # hidden_state_sequence
+        z
       end
 
       def classify(text : String)
-      end
-
-      def to_transition_probabilities
-      end
-
-      def to_emission_probabilities
       end
 
       def train(training_data : Hash(String, Hash(String, Int64)))
