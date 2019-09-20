@@ -40,6 +40,8 @@ module Cadmium
     # # => "indifferent"
     # ```
     class Bayes < Base
+      include JSON::Serializable
+      include YAML::Serializable
       DEFAULT_TOKENIZER = Cadmium::Tokenizer::Word.new
 
       @[JSON::Field(ignore: true)]
