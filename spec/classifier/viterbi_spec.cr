@@ -46,8 +46,8 @@ describe Cadmium::Classifier::Viterbi do
         classifier.token_to_label.should eq({"they" => ["pronoun"], "drink" => ["verb", "noun"], "water" => ["verb"], "like" => ["verb"], "having" => ["verb"], "a" => ["determinant"], "to" => ["adverb"], "down" => ["verb"]})
         classifier.observation_space.should eq(Set{"they", "drink", "water", "like", "having", "a", "to", "down"})
         classifier.state_space.should eq(Set{"pronoun", "verb", "determinant", "noun", "adverb"})
-        classifier.sequence_of_observations.should eq([[{"they", "pronoun"}, {"drink", "verb"}, {"water", "verb"}], [{"they", "pronoun"}, {"like", "verb"}, {"having", "verb"}], [{"a", "determinant"}, {"drink", "noun"}, {"to", "adverb"}], [{"water", "verb"}, {"down", "verb"}, {"", ""}]])
-        classifier.sequence_of_prior_observations.should eq([[{"they", "pronoun"}, {"drink", "verb"}], [{"they", "pronoun"}, {"like", "verb"}], [{"a", "determinant"}, {"drink", "noun"}], [{"water", "verb"}, {"down", "verb"}]])
+        classifier.sequence_of_ngrams.should eq([[{"they", "pronoun"}, {"drink", "verb"}, {"water", "verb"}], [{"they", "pronoun"}, {"like", "verb"}, {"having", "verb"}], [{"a", "determinant"}, {"drink", "noun"}, {"to", "adverb"}], [{"water", "verb"}, {"down", "verb"}, {"", ""}]])
+        classifier.sequence_of_prior_ngrams.should eq([[{"they", "pronoun"}, {"drink", "verb"}], [{"they", "pronoun"}, {"like", "verb"}], [{"a", "determinant"}, {"drink", "noun"}], [{"water", "verb"}, {"down", "verb"}]])
         classifier.ngram_label_count.should eq({["pronoun", "verb", "verb"] => 2, ["determinant", "noun", "adverb"] => 1, ["verb", "verb", ""] => 1})
         classifier.prior_ngram_label_count.should eq({["pronoun", "verb"] => 2, ["determinant", "noun"] => 1, ["verb", "verb"] => 1})
         # classifier.transition_matrix.should eq({["verb", "pronoun"] => 2, ["noun", "determinant"] => 1, ["verb", "verb"] => 1})
@@ -67,7 +67,9 @@ describe Cadmium::Classifier::Viterbi do
         classifier = subject.new
         classifier.train(data_1)
         classifier.train(data_2)
-        classifier.viterbi.should eq(3)
+        classifier.classify.should eq(2)
+        # classifier.sequence_of_observations.should eq(3)
+        # classifier.classify.should eq(3)
       end
     end
   end
