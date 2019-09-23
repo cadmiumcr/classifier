@@ -11,32 +11,6 @@ module Cadmium
     # Absolute discounting
     # Kneser-Ney smoothing <= This is the one we need to implement !
 
-    # struct TrainingData
-    #   property data : Hash(String, String) # token => label
-    #   property unique_tokens : Set(String)
-    #   property unique_labels : Set(String)
-    #   property label_to_token_count : Hash(String, Hash(String, Int32))
-
-    #   def all
-    #     @data
-    #   end
-
-    #   def initialize(data : Hash(String, String))
-    #     @data = data
-    #     @unique_tokens = self.ordered_tokens.to_set
-    #     @unique_labels = self.ordered_labels.to_set
-    #     @label_to_token_count = @data.tally
-    #   end
-
-    #   def ordered_tokens
-    #     @data.keys
-    #   end
-
-    #   def ordered_labels
-    #     @data.values
-    #   end
-    # end
-
     class Viterbi < Base
       include Apatite
       getter training_data : Array(Tuple(String, String)) # [] of [token,label]
@@ -44,18 +18,21 @@ module Cadmium
       getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
       getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
       getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
-      getter observation_space : Set(String)                        # Set of tokens
-      getter state_space : Set(String)                              # Set of labels
+      getter observation_space : Set(String)                        # A finite set of possible observations. (ie a dictionnary of words)
+      getter state_space : Set(String)                              # A finite set of states. (ie grammatical labels for POS labelling)
       # property initial_probabilities
       getter ngrams_size : Int32
-      getter sequence_of_observations : Array(Array(Tuple(String, String)))       # Array of ngrams goldlabeled
-      getter sequence_of_prior_observations : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
-      getter ngram_label_count : Hash(Array(String), Int32)
+      getter sequence_of_ngrams : Array(Array(Tuple(String, String)))       # A sequence of observations. (ie a dataset of trigrams goldlabeled)# Array of ngrams goldlabeled
+      getter sequence_of_prior_ngrams : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
+      getter ngram_label_count : Hash(Array(String), Int32)                 #
       getter prior_ngram_label_count : Hash(Array(String), Int32)
 
       getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
       getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
-      getter initial_probabilities : Vector(Float64)
+      getter initial_probabilities : Array(Float64)
+      getter epsilon : Float64 # Insignificant small number.
+      getter sequence_of_observations : Array(String)
+      getter predicted_states : Array(String)
 
       def initialize(ngrams_size = 3)
         @training_data = Array(Tuple(String, String)).new
@@ -65,13 +42,32 @@ module Cadmium
         @observation_space = Set(String).new
         @state_space = Set(String).new
         @ngrams_size = ngrams_size
-        @sequence_of_observations = Array(Array(Tuple(String, String))).new
-        @sequence_of_prior_observations = Array(Array(Tuple(String, String))).new
+        @sequence_of_ngrams = Array(Array(Tuple(String, String))).new
+        @sequence_of_prior_ngrams = Array(Array(Tuple(String, String))).new
         @ngram_label_count = Hash(Array(String), Int32).new
         @prior_ngram_label_count = Hash(Array(String), Int32).new
         @transition_matrix = Matrix(Float64).build(1) { 0.0 }
         @emission_matrix = Matrix(Float64).build(1) { 0.0 }
-        @initial_probabilities = Vector(Float64).elements(@state_space.map { |_| (1 / @state_space.size).to_f })
+        @initial_probabilities = Array(Float64).new
+        @epsilon = 0.000001
+        @sequence_of_observations = Array(String).new
+        @predicted_states = Array(String).new
+      end
+
+      # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
+      # q(s|u, v) = c(u, v, s) / c(u, v)
+      #   c(u, v, s) represents the ngram count of states u, v and s. Meaning it represents the number of times the n states u, v, ..., and s occurred together in that order in the training corpus.
+      #   c(u, v) following along similar lines as that of the ngram count, this is the n-1gram count of states u and v given the training corpus.
+      private def transition_probability(ngram_label_count, prior_ngram_label_count) : Float64
+        (ngram_label_count / (prior_ngram_label_count + @epsilon)).to_f
+      end
+
+      # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      # e(x|s) = c(s → x) / c(s)
+      #   c(s → x) is the number of times in the training set that the state s and observation x are paired with each other.
+      #   c(s) is the prior probability of an observation being labelled as the state s.
+      private def emission_probability(token_label_count, token_count) : Float64
+        (token_label_count / token_count).to_f
       end
 
       def train(training_data : Array(Tuple(String, String)))
@@ -81,137 +77,79 @@ module Cadmium
         @observation_space = @training_data.map { |tuple| tuple[0] }.to_set
         @token_to_label = @observation_space.to_h { |token| {token, @token_label_count.keys.map { |tuple| tuple.skip(1) if tuple.includes?(token) }.flatten.compact!} }
         @state_space = @training_data.map { |tuple| tuple[1] }.to_set
-        @sequence_of_observations = @training_data.in_groups_of(@ngrams_size, {"", ""})
-        @sequence_of_prior_observations = @sequence_of_observations.map { |ngram| ngram[...@ngrams_size - 1] }
-        @ngram_label_count = @sequence_of_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
-        @prior_ngram_label_count = @sequence_of_prior_observations.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+        @sequence_of_ngrams = @training_data.in_groups_of(@ngrams_size, {"", ""})
+        @sequence_of_prior_ngrams = @sequence_of_ngrams.map { |ngram| ngram[...@ngrams_size - 1] }
+        @ngram_label_count = @sequence_of_ngrams.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+        @prior_ngram_label_count = @sequence_of_prior_ngrams.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
         @transition_matrix = Matrix(Float64).build(@state_space.size) { 0.0 }
         @emission_matrix = Matrix(Float64).build(@state_space.size, @observation_space.size) { 0.0 }
+        # Construct the Transition matrix
         @state_space.each_with_index do |state_1, i|
           @state_space.each_with_index do |state_2, j|
             ngram_index = @ngram_label_count.keys.index { |ngram| ngram.join.includes?(state_1 + state_2) }
             @transition_matrix[i, j] = transition_probability(@ngram_label_count.values[ngram_index], prior_ngram_label_count.fetch([state_1, state_2], 0.0)) unless !ngram_index
           end
         end
+        # Construct the Emission matrix
         @state_space.each_with_index do |label, i|
           @observation_space.each_with_index do |token, j|
             @emission_matrix[i, j] = emission_probability(@token_label_count.fetch({token, label}, 0.0), @token_count.fetch(token, 0.0))
           end
         end
+        @initial_probabilities = @state_space.map { |_| (1.to_f / @state_space.size).to_f }
       end
 
-      # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
-      # q(s|u, v) = c(u, v, s) / c(u, v)
-      #   c(u, v, s) represents the ngram count of states u, v and s. Meaning it represents the number of times the n states u, v, ..., and s occurred together in that order in the training corpus.
-      #   c(u, v) following along similar lines as that of the ngram count, this is the n-1gram count of states u and v given the training corpus.
-      def transition_probability(ngram_label_count, prior_ngram_label_count) : Float64
-        (ngram_label_count / (prior_ngram_label_count + 0.000001)).to_f
-      end
-
-      # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
-      # e(x|s) = c(s → x) / c(s)
-      #   c(s → x) is the number of times in the training set that the state s and observation x are paired with each other.
-      #   c(s) is the prior probability of an observation being labelled as the state s.
-      def emission_probability(token_label_count, token_count) : Float64
-        (token_label_count / token_count).to_f
-      end
-
-      # A trigram Hidden Markov Model can be defined using
-
-      # A finite set of states. (ie grammatical labels for POS labelling)
-      # A sequence of observations. (ie a dataset of trigrams goldlabeled)
-
-      def offset(i = 0)
+      private def offset(i = 0)
         i -= 1
         return 0 if i < 0
         i
       end
 
-      def viterbi                                     # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
-        observation_space = @sequence_of_observations # if @observation_space.nil?
-        t1 = Matrix.vstack(@initial_probabilities.to_matrix, Matrix(Float64).build(observation_space.size, @state_space.size - 1) { 0.000001 })
-        t2 = Matrix.vstack(Vector(Float64).elements(@state_space.map { |_| 0.000001 }).to_matrix, Matrix(Float64).build(observation_space.size, @state_space.size - 1) { 0.000001 })
-        t1 = t1.map_with_index { |k, i, j| (t1[..][offset(j)].map { |k2| k2 * @transition_matrix[i, j] * @emission_matrix[i, j] }).max.as(Float64) }
-        t2 = t1.map_with_index { |k, i, j| t1[..][offset(j)].max_by { |k2| k2 * @transition_matrix[i, j] } }
+      def classify # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
+        # observation_space = @sequence_of_observations # if @observation_space.nil?
+        @sequence_of_observations = ["they", "like", "having", "a", "drink", "to", "water", "down"]
+        @predicted_states = Array(String).new(@sequence_of_observations.size, "")
 
-        # t1.each_with_index(1) { |k, i, j| k = (t1[..][j - 1].map { |k2| k2 * @transition_matrix[i, j] * @emission_matrix[i, j] }.max) }
-        # t2.each_with_index(1) { |k, i, j| k = t1[..][j - 1].max_by { |k2| k2 * @transition_matrix[i, j] } }
-        # t2 = Array.new(dim) { |i| Array.new(1) { |j| 0.0 } }
-        # t1 = Array.new(2){ |i|  }
-        # t2 = Array(Array(Float64)).new
-        states_count = @state_space.size
-        return t2
+        # @initial_probabilities
 
-        # @state_space.each_with_index do |_, i|
-        #   t1[i][0] = emission_matrix[i, 1] # * initial_probabilities[i]
+        t1 = Matrix.hstack(Matrix.column_vector(@initial_probabilities), Matrix(Float64).build(@state_space.size, @sequence_of_observations.size - 1) { @epsilon })
+        t2 = Matrix.hstack(Matrix.column_vector(@state_space.map_with_index { |_, i| i }), Matrix(Int32).build(@state_space.size, @sequence_of_observations.size - 1) { 0 })
+
+        @sequence_of_observations[1..].each_with_index do |token, j|
+          @state_space.each_with_index do |_, i|
+            t1[i, j] = (t1.column(j - 1) * @transition_matrix.row(i) * @emission_matrix[i, @observation_space.index(token).not_nil!]).max
+            # t2[i, j] = t1.column(j - 1)
+            t2[i, j] = t1.column(j - 1).index(t1.column(j - 1).max_by { |state| state * @transition_matrix[t1.column(j - 1).index(state).not_nil!, i] }).not_nil!
+            # t2[i, j] = t1.column(j - 1).index(t1.column(j - 1).max_by { |state| state * @transition_matrix[t1.column(j - 1).index(state), i] })
+            # (t1.column(j - 1) * @transition_matrix.row(i) }).max_by { || @observation_space.index.} not_nil!
+          end
+        end
+        # return t2
+        predicted_values = Array(Int32).new(@sequence_of_observations.size, 0)
+        argmax = t1[0, t1.column_count - 1]
+        # predicted_values << t1.column(t1.column_count - 1).index(t1.column(t1.column_count - 1).max).not_nil!
+
+        @state_space.to_a[1..].each_with_index do |_, k|
+          if t1[k, t1.column_count - 1] > argmax
+            argmax = t1[k, t1.column_count - 1]
+            predicted_values[@sequence_of_observations.size - 1] = k
+          end
+        end
+
+        @predicted_states[@sequence_of_observations.size - 1] = @state_space.to_a[predicted_values[@sequence_of_observations.size - 1]]
+
+        (@sequence_of_observations.size - 1..0).each_with_index do |_, i|
+          predicted_values[i - 1] = t2[predicted_values[i], i]
+          @predicted_states[i - 1] = @state_space.to_a[predicted_values[i - 1]]
+        end
+        @predicted_states
+        # jj = (2...@sequence_of_observations.size - 1).to_a.reverse
+        # jj.each do |j|
+        #   return t2 # z[j]
+        #   predicted_values[j - 1] = t2[predicted_values[j], j]
+        #   predicted_values[j - 1] = @state_space.to_a[t2[]]
         # end
-        # observation_space.each_with_index(1) do |_, j|
-        #   @state_space.each_with_index do |_, i|
-        #     t1[i][0] = 0.12 # (t1[..][j - 1].map { |k| k * @transition_matrix[i, j] * @emission_matrix[i, j] }).max
-        #     t2[i][0] = 0.1  # t1[..][j - 1].max_by { |k| k * @transition_matrix[i, j] }
-        #   end
-        # end
-        z = t1[..][...].max_by { |k| k }
-        hidden_state_sequence = Array(String).new
-        # hidden_state_sequence[observation_space.size] = observation_space[z]
 
-        # [observation_space.size - 1..2].each do |j|
-        #   hidden_state_sequence[j - 1] = state_space[t2[]]
-        # end
-        # hidden_state_sequence
-        z
-      end
-
-      def classify(text : String)
-      end
-
-      def train(training_data : Hash(String, Hash(String, Int64)))
-        #   # will hold conditional frequency distribution for P(Wi|Ck)
-        #   self.words_given_pos = {}
-
-        #   # will hold conditional frequency distribution for P(Ci+2|Ci+1, Ci)
-        #   self.pos3_given_pos2_and_pos1 = {}
-
-        #   # A helper object that gives us access to parsed files' data, both test and train.
-        #   self.parser = DataParser(corpus_files)
-
-        #   # An iterator over KFoldCrossValidation logic.
-        #   self.cycle_iterator = KFoldCrossValidation(ConditionalProbability.k_fold, self.parser.get_training_data())
-
-        #   # Mapping of a word to set of labels it occurred with in the entire corpus
-        #   self.word_to_label = {}
-
-        #   # Count of word and label occurring together.
-        #   self.word_label_count = {}
-
-        #   # Count of given word in the entire corpus
-        #   self.label_count = {}
-
-        #   # Count the occurrence of 3 labels in a sequence
-        #   self.trigram_counts = {}
-
-        #   # Count of two labels (prior) in a sequence
-        #   self.bigram_counts = {}
-
-        #   # Set of all the labels in the corpus
-        #   self.labels = set()
-
-        #   # Set of all the words in the corpus
-        #   self.words = set()
-
-        #   """ Back-off Probabilities """
-        #   self.transition_backoff = {}
-        #   self.emission_backoff = {}
-
-        #   """ Singleton counts """
-        #   self.transition_singleton = {}
-        #   self.emission_singleton = {}
-
-        #   """ 1-count smoothed probabilities """
-        #   self.transition_one_count = {}
-        #   self.emission_smoothed = {}
-
-        #   self.n = 0
       end
 
       #     # http://www.adeveloperdiary.com/data-science/machine-learning/implement-viterbi-algorithm-in-hidden-markov-model-using-python-and-r/
