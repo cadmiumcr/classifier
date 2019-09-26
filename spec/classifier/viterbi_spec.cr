@@ -18,6 +18,23 @@ describe Cadmium::Classifier::Viterbi do
     {"water", "verb"},
     {"down", "verb"},
   ]
+  data_3 = Array(Tuple(String, String)).new
+  test_data = Array(String).new
+  tokenizer = Cadmium::Tokenizer::Word.new
+  File.read_lines("#{__DIR__}/WSJ_24.pos").each do |line|
+    tuple = tokenizer.tokenize(line).map { |token| token.downcase }
+    data_3 << Tuple(String, String).from(tuple) if tuple.size == 2
+  end
+
+  data_full = Array(Tuple(String, String)).new
+  File.read_lines("#{__DIR__}/WSJ-full.pos").each do |line|
+    tuple = tokenizer.tokenize(line).map { |token| token.downcase }
+    data_full << Tuple(String, String).from(tuple) if tuple.size == 2
+  end
+
+  File.read_lines("#{__DIR__}/WSJ-test.words").each do |line|
+    test_data << line.downcase
+  end
 
   describe "#initialize" do
     it "successfully initalizes all defaults" do
@@ -64,12 +81,16 @@ describe Cadmium::Classifier::Viterbi do
     end
     describe "#viterbi" do
       it "should not crash" do
-        classifier = subject.new
-        classifier.train(data_1)
-        classifier.train(data_2)
-        classifier.classify.should eq(2)
+        classifier = subject.new(2)
+        # classifier.train(data_1)
+        # classifier.train(data_2)
+        classifier.train(data_3)
+        # test_data.should eq(2)
+        # classifier.label_count.should eq(2)
+        # classifier.emission_matrix.should eq(2)
+        classifier.classify(test_data).should eq(2)
         # classifier.sequence_of_observations.should eq(3)
-        # classifier.classify.should eq(3)
+
       end
     end
   end

@@ -61,7 +61,7 @@ module Cadmium
       #   c(u, v, s) represents the ngram count of states u, v and s. Meaning it represents the number of times the n states u, v, ..., and s occurred together in that order in the training corpus.
       #   c(u, v) following along similar lines as that of the ngram count, this is the n-1gram count of states u and v given the training corpus.
       private def transition_probability(ngram_label_count, prior_ngram_label_count) : Float64
-        (ngram_label_count / (prior_ngram_label_count + @epsilon)).to_f
+        (ngram_label_count + 0.001 / (prior_ngram_label_count + 0.001*@state_space.size)).to_f
       end
 
       # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
@@ -69,7 +69,7 @@ module Cadmium
       #   c(s → x) is the number of times in the training set that the state s and observation x are paired with each other.
       #   c(s) is the prior probability of an observation being labelled as the state s.
       private def emission_probability(token_label_count, label_count) : Float64
-        ((token_label_count + 1) / (label_count)).to_f
+        ((token_label_count + 0.001) / (label_count + 0.001*@observation_space.to_a.size)).to_f
       end
 
       def train(training_data : Array(Tuple(String, String)))
@@ -91,22 +91,18 @@ module Cadmium
           @state_space.each_with_index do |state_2, j|
             ngram_index = @ngram_label_count.keys.index { |ngram| ngram.join.includes?(state_1 + state_2) }
             @transition_matrix[i, j] = transition_probability(@ngram_label_count.values[ngram_index], prior_ngram_label_count.fetch([state_1, state_2], 0.0)) unless !ngram_index
+            @transition_matrix[i, j] = 0.0001 if !ngram_index
           end
         end
+        @transition_matrix = Matrix.rows(@transition_matrix.row_vectors.map { |row| row.normalize.to_a })
         # Construct the Emission matrix
         @state_space.each_with_index do |label, i|
           @observation_space.each_with_index do |token, j|
             @emission_matrix[i, j] = emission_probability(@token_label_count.fetch({token, label}, 0.0), @label_count.fetch(label, 0.0))
           end
         end
-        @emission_matrix
+        @emission_matrix = Matrix.rows(@emission_matrix.row_vectors.map { |row| row.normalize.to_a })
         @initial_probabilities = @state_space.map { |_| (1.to_f / @state_space.size).to_f }
-      end
-
-      private def offset(i = 0)
-        i -= 1
-        return 0 if i < 0
-        i
       end
 
       def classify(sequence_of_observations) # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
@@ -116,7 +112,7 @@ module Cadmium
         @sequence_of_observations = sequence_of_observations                           # ["they", "like", "having", "a", "drink", "to", "money", "down"]
         @predicted_states = Array(String).new(@sequence_of_observations.size, "")
         t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
-        t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size - 1) { 0 }
+        t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size) { 0 }
         # t1 = Matrix.hstack(Matrix.column_vector(@initial_probabilities), Matrix(Float64).build(@state_space.size, @sequence_of_observations.size - 1) { @epsilon })
         # t2 = Matrix.hstack(Matrix.column_vector(@state_space.map_with_index { |_, i| i }), Matrix(Int32).build(@state_space.size, @sequence_of_observations.size - 1) { 0 })
 
