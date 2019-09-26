@@ -129,7 +129,7 @@ module Cadmium
           end
         end
 
-        @sequence_of_observations[1..].each_with_index do |token, i|
+        @sequence_of_observations.each_with_index do |token, i|
           @state_space.each_with_index do |_, j|
             best_probability = -1.7976931348623157e+308
             best_path = 0 # to be fixed
