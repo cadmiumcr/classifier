@@ -105,16 +105,13 @@ module Cadmium
         @initial_probabilities = @state_space.map { |_| (1.to_f / @state_space.size).to_f }
       end
 
-      def classify(sequence_of_observations) # (observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix) # : Array
-        # observation_space = @sequence_of_observations # if @observation_space.nil?
+      def classify(sequence_of_observations)
         lookup_table = Hash(String, Int32).new
         @observation_space.to_a.each_with_index { |token, i| lookup_table[token] = i } # for performance reasons
         @sequence_of_observations = sequence_of_observations                           # ["they", "like", "having", "a", "drink", "to", "money", "down"]
         @predicted_states = Array(String).new(@sequence_of_observations.size, "")
         t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
         t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size) { 0 }
-        # t1 = Matrix.hstack(Matrix.column_vector(@initial_probabilities), Matrix(Float64).build(@state_space.size, @sequence_of_observations.size - 1) { @epsilon })
-        # t2 = Matrix.hstack(Matrix.column_vector(@state_space.map_with_index { |_, i| i }), Matrix(Int32).build(@state_space.size, @sequence_of_observations.size - 1) { 0 })
 
         # @initial_probabilities
 
@@ -123,7 +120,6 @@ module Cadmium
             t1[i, 0] = -1.7976931348623157e+308
             t2[i, 0] = 0 # this needs to be fixed
           else
-            # return @sequence_of_observations.first if @observation_space.to_a.index(@sequence_of_observations.first).nil?
             t1[i, 0] = Math.log(@transition_matrix[0, i]) + Math.log(@emission_matrix[i, lookup_table.fetch(@sequence_of_observations.first, 0)])
             t2[i, 0] = 0 # this needs to be fixed
           end
@@ -134,7 +130,6 @@ module Cadmium
             best_probability = -1.7976931348623157e+308
             best_path = 0 # to be fixed
             @state_space.each_with_index do |_, k|
-              # token = "money" if @observation_space.to_a.index(token).nil?
               probability = t1[k, i - 1] + Math.log(@transition_matrix[k, j]) + Math.log(@emission_matrix[j, lookup_table.fetch(token, 0)])
               if probability > best_probability
                 best_probability = probability
@@ -146,16 +141,6 @@ module Cadmium
           end
         end
 
-        # @sequence_of_observations[1..].each_with_index do |token, j|
-        #   @state_space.each_with_index do |_, i|
-        #     t1[i, j] = (t1.column(j - 1) * @transition_matrix.row(i) * @emission_matrix[i, @observation_space.index(token).not_nil!]).max
-        #     # t2[i, j] = t1.column(j - 1)
-        #     t2[i, j] = t1.column(j - 1).index(t1.column(j - 1).max_by { |state| state * @transition_matrix[t1.column(j - 1).index(state).not_nil!, i] }).not_nil!
-        #     # t2[i, j] = t1.column(j - 1).index(t1.column(j - 1).max_by { |state| state * @transition_matrix[t1.column(j - 1).index(state), i] })
-        #     # (t1.column(j - 1) * @transition_matrix.row(i) }).max_by { || @observation_space.index.} not_nil!
-        #   end
-        # end
-        # return t2
         predicted_values = Array(Int32).new(@sequence_of_observations.size, 0)
         argmax = t1[0, t1.column_count - 1]
 
@@ -173,13 +158,6 @@ module Cadmium
           @predicted_states[i - 1] = @state_space.to_a[predicted_values[i - 1]]
         end
         @sequence_of_observations.zip(@predicted_states)
-        # jj = (2...@sequence_of_observations.size - 1).to_a.reverse
-        # jj.each do |j|
-        #   return t2 # z[j]
-        #   predicted_values[j - 1] = t2[predicted_values[j], j]
-        #   predicted_values[j - 1] = @state_space.to_a[t2[]]
-        # end
-
       end
 
       #     # http://www.adeveloperdiary.com/data-science/machine-learning/implement-viterbi-algorithm-in-hidden-markov-model-using-python-and-r/
