@@ -108,7 +108,7 @@ module Cadmium
       def classify(sequence_of_observations)
         lookup_table = Hash(String, Int32).new
         @observation_space.to_a.each_with_index { |token, i| lookup_table[token] = i } # for performance reasons
-        @sequence_of_observations = sequence_of_observations                           # ["they", "like", "having", "a", "drink", "to", "money", "down"]
+        @sequence_of_observations = sequence_of_observations
         @predicted_states = Array(String).new(@sequence_of_observations.size, "")
         t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
         t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size) { 0 }
@@ -153,11 +153,11 @@ module Cadmium
 
         @predicted_states[@sequence_of_observations.size - 1] = @state_space.to_a[predicted_values[@sequence_of_observations.size - 1]]
 
-        @sequence_of_observations[1...].each_with_index do |_, i|
+        @sequence_of_observations.each_with_index do |_, i|
           predicted_values[i - 1] = t2[predicted_values[i], i]
           @predicted_states[i - 1] = @state_space.to_a[predicted_values[i - 1]]
         end
-        @sequence_of_observations.zip(@predicted_states)
+        @sequence_of_observations.zip(@predicted_states).to_h
       end
 
       #     # http://www.adeveloperdiary.com/data-science/machine-learning/implement-viterbi-algorithm-in-hidden-markov-model-using-python-and-r/
