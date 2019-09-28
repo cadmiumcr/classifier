@@ -2,14 +2,7 @@ require "./classifier"
 
 module Cadmium
   module Classifier
-    # Smoothing https://nlp.stanford.edu/~wcmac/papers/20050421-smoothing-tutorial.pdf
-    # Good-Turing estimate
-    # Jelinek-Mercer smoothing (interpolation)
-    # Katz smoothing (backoff)
-    # Witten-Bell smoothing
-    # Absolute discounting
-    # Kneser-Ney smoothing <= This is the one we need to implement !
-
+    # TODO : add Kneser-Ney smoothing
     # This is a Hidden Markov Model classifier which uses the Viterbi algorithm.
     # It is efficient in predicting a state given prior observations matched to states.
     # In NLP, it is often used to attribut POS tags to words of a text.
