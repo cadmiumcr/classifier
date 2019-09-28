@@ -1,6 +1,8 @@
 # Classifier
 
-Cadmium comes with one classifier so far, a Classic Bayes classifier. It is a probabalistic classifier that, when trained with a data set, can classify words according to categories.
+Cadmium comes with two classifiers so far, a Classic Bayes classifier and a Viterbi classifier. 
+
+Those are probabalistic classifiers that, when trained with a data set, can classify words (or other tokens) according to categories.
 
 ## Installation
 
@@ -52,7 +54,7 @@ classifier = classifier.from_json(json)
 
 ## Contributing
 
-1. Fork it (<https://github.com/cadmiumcr/lassifier/fork>)
+1. Fork it (<https://github.com/cadmiumcr/classifier/fork>)
 2. Create your feature branch (`git checkout -b my-new-feature`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
