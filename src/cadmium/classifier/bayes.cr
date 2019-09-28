@@ -39,7 +39,7 @@ module Cadmium
     # classifier.classify("idk, my bff jill?")
     # # => "indifferent"
     # ```
-    class Bayes < Base
+    class Bayes
       include JSON::Serializable
       include YAML::Serializable
       DEFAULT_TOKENIZER = Cadmium::Tokenizer::Word.new

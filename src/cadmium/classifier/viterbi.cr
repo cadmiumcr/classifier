@@ -1,7 +1,4 @@
 require "./classifier"
-require "json"
-require "zip"
-require "apatite"
 
 module Cadmium
   module Classifier
@@ -13,13 +10,16 @@ module Cadmium
     # Absolute discounting
     # Kneser-Ney smoothing <= This is the one we need to implement !
 
-    class Viterbi < Base
+    # This is a Hidden Markov Model classifier which uses the Viterbi algorithm.
+    # It is efficient in predicting a state given prior observations matched to states.
+    # In NLP, it is often used to attribut POS tags to words of a text.
+    # As such it is used by Cadmium::POSTagger.
+    class Viterbi
       include Apatite
       getter training_data : Array(Tuple(String, String)) # [] of [token,label]
       # observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix
       getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
       getter label_count : Hash(String, Int32)                      # Count of given label in the entire corpus
-      getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
       getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
 
       # property initial_probabilities
@@ -34,8 +34,7 @@ module Cadmium
       getter state_space : Set(String)           # A finite set of states. (ie grammatical labels for POS labelling)
       getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
       getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
-      getter initial_probabilities : Array(Float64)
-      getter epsilon : Float64 # Insignificant small number.
+      getter epsilon : Float64                   # Insignificant small number.
       getter sequence_of_observations : Array(String)
       getter predicted_states : Array(String)
 
@@ -44,7 +43,6 @@ module Cadmium
         @token_count = Hash(String, Int32).new
         @label_count = Hash(String, Int32).new
         @token_label_count = Hash(Tuple(String, String), Int32).new
-        @token_to_label = Hash(String, Array(String | Nil)).new
         @observation_space = Set(String).new
         @state_space = Set(String).new
         @ngrams_size = ngrams_size
@@ -54,7 +52,6 @@ module Cadmium
         @prior_ngram_label_count = Hash(Array(String), Int32).new
         @transition_matrix = Matrix(Float64).build(1) { 0.0 }
         @emission_matrix = Matrix(Float64).build(1) { 0.0 }
-        @initial_probabilities = Array(Float64).new
         @epsilon = 0.000001
         @sequence_of_observations = Array(String).new
         @predicted_states = Array(String).new
@@ -82,7 +79,6 @@ module Cadmium
         @label_count = @training_data.map { |tuple| tuple[1] }.tally
         @token_label_count = @training_data.tally
         @observation_space = @training_data.map { |tuple| tuple[0] }.to_set
-        @token_to_label = @observation_space.to_h { |token| {token, @token_label_count.keys.map { |tuple| tuple.skip(1) if tuple.includes?(token) }.flatten.compact!} }
         @state_space = @training_data.map { |tuple| tuple[1] }.to_set
         @sequence_of_ngrams = @training_data.in_groups_of(@ngrams_size, {"", ""})
         @sequence_of_prior_ngrams = @sequence_of_ngrams.map { |ngram| ngram[...@ngrams_size - 1] }
@@ -106,10 +102,9 @@ module Cadmium
           end
         end
         @emission_matrix = Matrix.rows(@emission_matrix.row_vectors.map { |row| row.normalize.to_a })
-        @initial_probabilities = @state_space.map { |_| (1.to_f / @state_space.size).to_f }
       end
 
-      def save_model(filename = "model.zip")
+      def save_model(filename : String = "model.zip")
         File.touch(filename)
         File.open(filename, "w") do |file|
           Zip::Writer.open(file) do |zip|
@@ -121,7 +116,7 @@ module Cadmium
         end
       end
 
-      def load_model(filename = "model.zip")
+      def load_model(filename : String = "model.zip")
         File.open(filename) do |file|
           Zip::Reader.open(file) do |zip|
             zip.each_entry do |entry|
@@ -134,7 +129,7 @@ module Cadmium
         end
       end
 
-      def classify(sequence_of_observations)
+      def classify(sequence_of_observations : Array(String)) : Hash(String, String)
         lookup_table = Hash(String, Int32).new
         @observation_space.to_a.each_with_index { |token, i| lookup_table[token] = i } # for performance reasons
         @sequence_of_observations = sequence_of_observations
@@ -142,7 +137,7 @@ module Cadmium
         t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
         t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size) { 0 }
 
-        # @initial_probabilities
+        # Calculates the initial probabilities
 
         @state_space.each_with_index do |_, i|
           if @transition_matrix[0, i] == 0.0
