@@ -1,4 +1,6 @@
 require "./classifier"
+require "json"
+require "zip"
 require "apatite"
 
 module Cadmium
@@ -19,15 +21,17 @@ module Cadmium
       getter label_count : Hash(String, Int32)                      # Count of given label in the entire corpus
       getter token_to_label : Hash(String, Array(String | Nil))     # Hash mapping each token to one or several labels
       getter token_label_count : Hash(Tuple(String, String), Int32) # Count of token and label occurring together.
-      getter observation_space : Set(String)                        # A finite set of possible observations. (ie a dictionnary of words)
-      getter state_space : Set(String)                              # A finite set of states. (ie grammatical labels for POS labelling)
+
       # property initial_probabilities
       getter ngrams_size : Int32
       getter sequence_of_ngrams : Array(Array(Tuple(String, String)))       # A sequence of observations. (ie a dataset of trigrams goldlabeled)# Array of ngrams goldlabeled
       getter sequence_of_prior_ngrams : Array(Array(Tuple(String, String))) # Array of (n-1)grams goldlabeled
       getter ngram_label_count : Hash(Array(String), Int32)                 #
       getter prior_ngram_label_count : Hash(Array(String), Int32)
+      # model data
 
+      getter observation_space : Set(String)     # A finite set of possible observations. (ie a dictionnary of words)
+      getter state_space : Set(String)           # A finite set of states. (ie grammatical labels for POS labelling)
       getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
       getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
       getter initial_probabilities : Array(Float64)
@@ -105,6 +109,31 @@ module Cadmium
         @initial_probabilities = @state_space.map { |_| (1.to_f / @state_space.size).to_f }
       end
 
+      def save_model(filename = "model.zip")
+        File.touch(filename)
+        File.open(filename, "w") do |file|
+          Zip::Writer.open(file) do |zip|
+            zip.add("observation-space.json", @observation_space.to_json)
+            zip.add("state-space.json", @state_space.to_json)
+            zip.add("transition-matrix.json", @transition_matrix.to_a.to_json)
+            zip.add("emission-matrix.json", @emission_matrix.to_a.to_json)
+          end
+        end
+      end
+
+      def load_model(filename = "model.zip")
+        File.open(filename) do |file|
+          Zip::Reader.open(file) do |zip|
+            zip.each_entry do |entry|
+              @observation_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "observation-space.json"
+              @state_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "state-space.json"
+              @transition_matrix = Matrix(Float64).from_json(entry.io.gets_to_end) if entry.filename == "transition-matrix.json"
+              @emission_matrix = Matrix(Float64).from_json(entry.io.gets_to_end) if entry.filename == "emission-matrix.json"
+            end
+          end
+        end
+      end
+
       def classify(sequence_of_observations)
         lookup_table = Hash(String, Int32).new
         @observation_space.to_a.each_with_index { |token, i| lookup_table[token] = i } # for performance reasons
@@ -116,19 +145,19 @@ module Cadmium
         # @initial_probabilities
 
         @state_space.each_with_index do |_, i|
-          if @transition_matrix[0, i] == 0.0 # This is to be fixed
+          if @transition_matrix[0, i] == 0.0
             t1[i, 0] = -1.7976931348623157e+308
-            t2[i, 0] = 0 # this needs to be fixed
+            t2[i, 0] = 0
           else
             t1[i, 0] = Math.log(@transition_matrix[0, i]) + Math.log(@emission_matrix[i, lookup_table.fetch(@sequence_of_observations.first, 0)])
-            t2[i, 0] = 0 # this needs to be fixed
+            t2[i, 0] = 0
           end
         end
 
         @sequence_of_observations.each_with_index do |token, i|
           @state_space.each_with_index do |_, j|
             best_probability = -1.7976931348623157e+308
-            best_path = 0 # to be fixed
+            best_path = 0
             @state_space.each_with_index do |_, k|
               probability = t1[k, i - 1] + Math.log(@transition_matrix[k, j]) + Math.log(@emission_matrix[j, lookup_table.fetch(token, 0)])
               if probability > best_probability
@@ -159,9 +188,6 @@ module Cadmium
         end
         @sequence_of_observations.zip(@predicted_states).to_h
       end
-
-      #     # http://www.adeveloperdiary.com/data-science/machine-learning/implement-viterbi-algorithm-in-hidden-markov-model-using-python-and-r/
-
     end
   end
 end

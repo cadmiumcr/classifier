@@ -56,7 +56,7 @@ describe Cadmium::Classifier::Viterbi do
     describe "#train" do
       it "calculates and updates pre-model values" do
         classifier = subject.new
-        classifier.train(data_1)
+        classifier.train(data_full)
         classifier.train(data_2)
         classifier.token_count.should eq({"they" => 2, "drink" => 2, "water" => 2, "like" => 1, "having" => 1, "a" => 1, "to" => 1, "down" => 1})
         classifier.token_label_count.should eq({ {"they", "pronoun"} => 2, {"drink", "verb"} => 1, {"water", "verb"} => 2, {"like", "verb"} => 1, {"having", "verb"} => 1, {"a", "determinant"} => 1, {"drink", "noun"} => 1, {"to", "adverb"} => 1, {"down", "verb"} => 1 })
@@ -71,27 +71,31 @@ describe Cadmium::Classifier::Viterbi do
         # classifier.emission_matrix.should eq({["verb", "pronoun"] => 2, ["noun", "determinant"] => 1, ["verb", "verb"] => 1})
       end
     end
-    describe "#to_json" do
-      # it "should ouput a json model" do
-      #   classifier = subject.new
-      #   classifier.train(data_1)
-      #   classifier.train(data_2)
-      #   classifier.to_json.should eq(3)
-      # end
-    end
-    describe "#viterbi" do
-      it "should not crash" do
-        classifier = subject.new(2)
-        # classifier.train(data_1)
-        # classifier.train(data_2)
+    describe "#save_model and #load_model" do
+      it "should ouput a json model and load while getting the same data" do
+        classifier = subject.new
         classifier.train(data_3)
-        # test_data.should eq(2)
-        # classifier.label_count.should eq(2)
-        # classifier.emission_matrix.should eq(2)
-        classifier.classify(test_data).should eq(2)
-        # classifier.sequence_of_observations.should eq(3)
-
+        classifier.save_model
+        classifier2 = subject.new
+        classifier2.load_model
+        classifier.observation_space.should eq(classifier2.observation_space)
       end
     end
+
+    # describe "#classify" do
+    #   it "should not crash" do
+    #     classifier = subject.new(2)
+    #     # classifier.train(data_1)
+    #     # classifier.train(data_2)
+    #     classifier.train(data_3)
+    #     # test_data.should eq(2)
+    #     # classifier.label_count.should eq(2)
+    #     # classifier.emission_matrix.should eq(2)
+    #     classifier.save_model
+    #     classifier.classify(test_data).should eq(2)
+    #     # classifier.sequence_of_observations.should eq(3)
+
+    #   end
+    # end
   end
 end
