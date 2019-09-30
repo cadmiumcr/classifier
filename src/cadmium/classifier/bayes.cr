@@ -39,7 +39,14 @@ module Cadmium
     # classifier.classify("idk, my bff jill?")
     # # => "indifferent"
     # ```
-    class Bayes < Base
+    class Bayes
+      include JSON::Serializable
+      include YAML::Serializable
+      DEFAULT_TOKENIZER = Cadmium::Tokenizer::Word.new
+
+      @[JSON::Field(ignore: true)]
+      @[YAML::Field(ignore: true)]
+      property tokenizer : Cadmium::Tokenizer::Base = DEFAULT_TOKENIZER
       # The words to learn from.
       getter vocabulary : Array(String)
 
