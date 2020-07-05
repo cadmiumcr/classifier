@@ -1,4 +1,4 @@
 require "json"
 require "yaml"
-require "zip"
+require "compress/zip"
 require "apatite"

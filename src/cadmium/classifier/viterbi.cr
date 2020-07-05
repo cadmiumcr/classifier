@@ -100,7 +100,7 @@ module Cadmium
       def save_model(filename : String = "model.zip")
         File.touch(filename)
         File.open(filename, "w") do |file|
-          Zip::Writer.open(file) do |zip|
+          Compress::Zip::Writer.open(file) do |zip|
             zip.add("observation-space.json", @observation_space.to_json)
             zip.add("state-space.json", @state_space.to_json)
             zip.add("transition-matrix.json", @transition_matrix.to_a.to_json)
@@ -111,7 +111,7 @@ module Cadmium
 
       def load_model(filename : String = "model.zip")
         File.open(filename) do |file|
-          Zip::Reader.open(file) do |zip|
+          Compress::Zip::Reader.open(file) do |zip|
             zip.each_entry do |entry|
               @observation_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "observation-space.json"
               @state_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "state-space.json"
