@@ -30,6 +30,7 @@ module Cadmium
       getter epsilon : Float64                   # Insignificant small number.
       getter sequence_of_observations : Array(String)
       getter predicted_states : Array(String)
+      getter lookup_table : Hash(String, Int32)
 
       def initialize(ngrams_size = 3)
         @training_data = Array(Tuple(String, String)).new
@@ -48,6 +49,7 @@ module Cadmium
         @epsilon = 0.000001
         @sequence_of_observations = Array(String).new
         @predicted_states = Array(String).new
+        @lookup_table = Hash(String, Int32).new
       end
 
       # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
@@ -72,6 +74,7 @@ module Cadmium
         @label_count = @training_data.map { |tuple| tuple[1] }.tally
         @token_label_count = @training_data.tally
         @observation_space = @training_data.map { |tuple| tuple[0] }.to_set
+        @observation_space.to_a.each_with_index { |token, i| @lookup_table[token] = i }
         @state_space = @training_data.map { |tuple| tuple[1] }.to_set
         @sequence_of_ngrams = @training_data.in_groups_of(@ngrams_size, {"", ""})
         @sequence_of_prior_ngrams = @sequence_of_ngrams.map { |ngram| ngram[...@ngrams_size - 1] }
@@ -120,11 +123,11 @@ module Cadmium
             end
           end
         end
+        @lookup_table = Hash(String, Int32).new
+        @observation_space.to_a.each_with_index { |token, i| @lookup_table[token] = i } # for performance reasons
       end
 
       def classify(sequence_of_observations : Array(String)) : Hash(String, String)
-        lookup_table = Hash(String, Int32).new
-        @observation_space.to_a.each_with_index { |token, i| lookup_table[token] = i } # for performance reasons
         @sequence_of_observations = sequence_of_observations
         @predicted_states = Array(String).new(@sequence_of_observations.size, "")
         t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
@@ -137,7 +140,7 @@ module Cadmium
             t1[i, 0] = -1.7976931348623157e+308
             t2[i, 0] = 0
           else
-            t1[i, 0] = Math.log(@transition_matrix[0, i]) + Math.log(@emission_matrix[i, lookup_table.fetch(@sequence_of_observations.first, 0)])
+            t1[i, 0] = Math.log(@transition_matrix[0, i]) + Math.log(@emission_matrix[i, @lookup_table.fetch(@sequence_of_observations.first, 0)])
             t2[i, 0] = 0
           end
         end
@@ -147,7 +150,7 @@ module Cadmium
             best_probability = -1.7976931348623157e+308
             best_path = 0
             @state_space.each_with_index do |_, k|
-              probability = t1[k, i - 1] + Math.log(@transition_matrix[k, j]) + Math.log(@emission_matrix[j, lookup_table.fetch(token, 0)])
+              probability = t1[k, i - 1] + Math.log(@transition_matrix[k, j]) + Math.log(@emission_matrix[j, @lookup_table.fetch(token, 0)])
               if probability > best_probability
                 best_probability = probability
                 best_path = k
