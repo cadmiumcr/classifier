@@ -5,7 +5,7 @@ authors:
   - Chris Watson <cawatson1993@gmail.com>
   - Rémy Marronnier <rmarronnier@gmail.com>
 
-crystal: 0.35.1
+crystal: "> 0.35.1"
 
 dependencies:
   cadmium_tokenizer:
@@ -13,5 +13,10 @@ dependencies:
   apatite:
     github: watzon/apatite
     branch: master
+
+development_dependencies:
+  ameba:
+    github: veelenga/ameba
+    version: "~> 0.14"
 
 license: MIT
