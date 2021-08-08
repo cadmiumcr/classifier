@@ -78,26 +78,26 @@ module Cadmium
         @state_space = @training_data.map { |tuple| tuple[1] }.to_set
         @sequence_of_ngrams = @training_data.in_groups_of(@ngrams_size, {"", ""})
         @sequence_of_prior_ngrams = @sequence_of_ngrams.map { |ngram| ngram[...@ngrams_size - 1] }
-        @ngram_label_count = @sequence_of_ngrams.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
-        @prior_ngram_label_count = @sequence_of_prior_ngrams.map { |ngram| ngram.map { |tuple| tuple.last } }.tally
+        @ngram_label_count = @sequence_of_ngrams.map { |ngram| ngram.map(&.last) }.tally
+        @prior_ngram_label_count = @sequence_of_prior_ngrams.map { |ngram| ngram.map(&.last) }.tally
         @transition_matrix = Matrix(Float64).build(@state_space.size) { 0.0 }
         @emission_matrix = Matrix(Float64).build(@state_space.size, @observation_space.size) { 0.0 }
         # Construct the Transition matrix
         @state_space.each_with_index do |state_1, i|
           @state_space.each_with_index do |state_2, j|
-            ngram_index = @ngram_label_count.keys.index { |ngram| ngram.join.includes?(state_1 + state_2) }
-            @transition_matrix[i, j] = transition_probability(@ngram_label_count.values[ngram_index], prior_ngram_label_count.fetch([state_1, state_2], 0.0)) unless !ngram_index
+            ngram_index = @ngram_label_count.keys.index(&.join.includes?(state_1 + state_2))
+            @transition_matrix[i, j] = transition_probability(@ngram_label_count.values[ngram_index], prior_ngram_label_count.fetch([state_1, state_2], 0.0)) if ngram_index
             @transition_matrix[i, j] = 0.0001 if !ngram_index
           end
         end
-        @transition_matrix = Matrix.rows(@transition_matrix.row_vectors.map { |row| row.normalize.to_a })
+        @transition_matrix = Matrix.rows(@transition_matrix.row_vectors.map(&.normalize.to_a))
         # Construct the Emission matrix
         @state_space.each_with_index do |label, i|
           @observation_space.each_with_index do |token, j|
             @emission_matrix[i, j] = emission_probability(@token_label_count.fetch({token, label}, 0.0), @label_count.fetch(label, 0.0))
           end
         end
-        @emission_matrix = Matrix.rows(@emission_matrix.row_vectors.map { |row| row.normalize.to_a })
+        @emission_matrix = Matrix.rows(@emission_matrix.row_vectors.map(&.normalize.to_a))
       end
 
       def save_model(filename : String = "model.zip")
