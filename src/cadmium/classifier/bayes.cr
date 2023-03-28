@@ -140,38 +140,53 @@ module Cadmium
 
       # Determines what category the `text` belongs to.
       def classify(text : String)
-        max_probability = -Float64::INFINITY
-        chosen_category = nil
-
         tokens = tokenizer.tokenize(text)
         freq_table = frequency_table(tokens)
 
-        # Iterate through our categories to find the one with
-        # the maximum probability for this text.
-        @categories.each do |category|
-          # Start out by calculating the overall probability of
-          # this category. (out of all the documents we've
-          # looked at, how many were mapped to this category)
+        # Iterate through our categories to calculate log probabilities
+        log_probabilities = @categories.map do |category|
+          # Calculate the overall probability of this category
           category_probability = @doc_count[category].to_f64 / @total_documents.to_f64
 
-          # Take the log to avoid underflow
+          # Take the LOG of the probability of this category
           log_probability = Math.log(category_probability)
 
-          # Now determine P( w | c ) for each word `w` in the text.
-          freq_table.each do |token, frequency_in_text|
+          # Now we need to iterate through each word in our text and add the log probability of that word belonging to this category
+          freq_table.each do |token, frequency|
+            # Calculate the probability that this word belongs to this category
             token_prob = token_probability(token, category)
 
-            # Determine the log of the P( w | c ) for this word.
-            log_probability += frequency_in_text * Math.log(token_prob)
+            # Add the log probability of this word belonging to this category to our running total
+            log_probability += frequency * Math.log(token_prob)
           end
 
-          if log_probability > max_probability
-            max_probability = log_probability
-            chosen_category = category
-          end
+          {category, log_probability}
         end
 
-        chosen_category
+        # Find the maximum log probability
+        max_log_prob = log_probabilities.max_by { |prob| prob[1] }[1]
+
+        # Calculate the log-sum-exp of all the probabilities
+        log_sum_exp = log_probabilities.map { |prob| prob[1] }.reduce(0_f64) do |sum, prob|
+          sum + Math.exp(prob - max_log_prob)
+        end
+
+        # Normalize the log probabilities and convert them to regular probabilities
+        probabilities = log_probabilities.map do |prob|
+          {prob[0], Math.exp(prob[1] - max_log_prob - Math.log(log_sum_exp))}
+        end
+
+        # Convert the probabilities to percentages
+        percentages = probabilities.map do |prob|
+          {prob[0], prob[1] * 100}
+        end
+
+        # Return the sorted percentages as a Hash
+        Hash(String, Float64).new.tap do |hash|
+          percentages.sort_by { |prob| prob[1] }.reverse_each do |prob|
+            hash[prob[0]] = prob[1]
+          end
+        end
       end
 
       # Calculate the probaility that a `token` belongs to
