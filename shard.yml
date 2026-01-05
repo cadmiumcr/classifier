@@ -10,9 +10,8 @@ crystal: "> 0.35.1"
 dependencies:
   cadmium_tokenizer:
     github: cadmiumcr/tokenizer
-  apatite:
-    github: watzon/apatite
-    branch: master
+  num:
+    github: crystal-data/num.cr
   msgpack:
     github: crystal-community/msgpack-crystal
 

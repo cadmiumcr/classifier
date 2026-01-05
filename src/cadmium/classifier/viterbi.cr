@@ -8,7 +8,6 @@ module Cadmium
     # In NLP, it is often used to attribut POS tags to words of a text.
     # As such it is used by Cadmium::POSTagger.
     class Viterbi
-      include Apatite
       getter training_data : Array(Tuple(String, String)) # [] of [token,label]
       # observation_space, state_space, initial_probabilities, sequence_of_observations, transition_matrix, emission_matrix
       getter token_count : Hash(String, Int32)                      # Count of given token in the entire corpus
@@ -23,11 +22,11 @@ module Cadmium
       getter prior_ngram_label_count : Hash(Array(String), Int32)
       # model data
 
-      getter observation_space : Set(String)     # A finite set of possible observations. (ie a dictionnary of words)
-      getter state_space : Set(String)           # A finite set of states. (ie grammatical labels for POS labelling)
-      getter transition_matrix : Matrix(Float64) # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
-      getter emission_matrix : Matrix(Float64)   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
-      getter epsilon : Float64                   # Insignificant small number.
+      getter observation_space : Set(String)                   # A finite set of possible observations. (ie a dictionnary of words)
+      getter state_space : Set(String)                         # A finite set of states. (ie grammatical labels for POS labelling)
+      getter transition_matrix : Tensor(Float64, CPU(Float64)) # q(s|u, v) : Transition probability defined as the probability of a state "s" appearing right after observing "u" and "v" in the sequence of observations.
+      getter emission_matrix : Tensor(Float64, CPU(Float64))   # e(x|s) : Emission probability defined as the probability of making an observation x given that the state was s.
+      getter epsilon : Float64                                 # Insignificant small number.
       getter sequence_of_observations : Array(String)
       getter predicted_states : Array(String)
       getter lookup_table : Hash(String, Int32)
@@ -44,15 +43,15 @@ module Cadmium
         @sequence_of_prior_ngrams = Array(Array(Tuple(String, String))).new
         @ngram_label_count = Hash(Array(String), Int32).new
         @prior_ngram_label_count = Hash(Array(String), Int32).new
-        @transition_matrix = Matrix(Float64).build(1) { 0.0 }
-        @emission_matrix = Matrix(Float64).build(1) { 0.0 }
+        @transition_matrix = Tensor.new([1, 1]) { 0.0 }
+        @emission_matrix = Tensor.new([1, 1]) { 0.0 }
         @epsilon = 0.000001
         @sequence_of_observations = Array(String).new
         @predicted_states = Array(String).new
         @lookup_table = Hash(String, Int32).new
       end
 
-      # q(s|u, v) : Transition probability defined as the probability of a state “s” appearing right after observing “u” and “v” in the sequence of observations.
+      # q(s|u, v) : Transition probability defined as the probability of a state "s" appearing right after observing "u" and "v" in the sequence of observations.
       # q(s|u, v) = c(u, v, s) / c(u, v)
       #   c(u, v, s) represents the ngram count of states u, v and s. Meaning it represents the number of times the n states u, v, ..., and s occurred together in that order in the training corpus.
       #   c(u, v) following along similar lines as that of the ngram count, this is the n-1gram count of states u and v given the training corpus.
@@ -68,6 +67,22 @@ module Cadmium
         ((token_label_count + 0.001) / (label_count + 0.001*@observation_space.to_a.size)).to_f
       end
 
+      # Helper to normalize rows of a tensor
+      private def normalize_rows(tensor : Tensor(Float64, CPU(Float64))) : Tensor(Float64, CPU(Float64))
+        rows = tensor.shape[0]
+        cols = tensor.shape[1]
+        result = Tensor.new([rows, cols]) { 0.0 }
+        rows.times do |i|
+          row = tensor[i, ...]
+          # Calculate L2 norm manually for 1D tensor
+          row_norm_sq = (row * row).sum
+          row_norm_val = Math.sqrt(row_norm_sq)
+          row_norm = row / row_norm_val
+          result[i, ...] = row_norm
+        end
+        result
+      end
+
       def train(training_data : Array(Tuple(String, String)))
         @training_data += training_data
         @token_count = @training_data.map { |tuple| tuple[0] }.tally
@@ -80,8 +95,8 @@ module Cadmium
         @sequence_of_prior_ngrams = @sequence_of_ngrams.map { |ngram| ngram[...@ngrams_size - 1] }
         @ngram_label_count = @sequence_of_ngrams.map { |ngram| ngram.map(&.last) }.tally
         @prior_ngram_label_count = @sequence_of_prior_ngrams.map { |ngram| ngram.map(&.last) }.tally
-        @transition_matrix = Matrix(Float64).build(@state_space.size) { 0.0 }
-        @emission_matrix = Matrix(Float64).build(@state_space.size, @observation_space.size) { 0.0 }
+        @transition_matrix = Tensor.new([@state_space.size, @state_space.size]) { 0.0 }
+        @emission_matrix = Tensor.new([@state_space.size, @observation_space.size]) { 0.0 }
         # Construct the Transition matrix
         @state_space.each_with_index do |state_1, i|
           @state_space.each_with_index do |state_2, j|
@@ -90,14 +105,14 @@ module Cadmium
             @transition_matrix[i, j] = 0.0001 if !ngram_index
           end
         end
-        @transition_matrix = Matrix.rows(@transition_matrix.row_vectors.map(&.normalize.to_a))
+        @transition_matrix = normalize_rows(@transition_matrix)
         # Construct the Emission matrix
         @state_space.each_with_index do |label, i|
           @observation_space.each_with_index do |token, j|
             @emission_matrix[i, j] = emission_probability(@token_label_count.fetch({token, label}, 0.0), @label_count.fetch(label, 0.0))
           end
         end
-        @emission_matrix = Matrix.rows(@emission_matrix.row_vectors.map(&.normalize.to_a))
+        @emission_matrix = normalize_rows(@emission_matrix)
       end
 
       def save_model(filename : String = "model.zip")
@@ -106,10 +121,41 @@ module Cadmium
           Compress::Zip::Writer.open(file) do |zip|
             zip.add("observation-space.json", @observation_space.to_json)
             zip.add("state-space.json", @state_space.to_json)
-            zip.add("transition-matrix.json", @transition_matrix.to_a.to_json)
-            zip.add("emission-matrix.json", @emission_matrix.to_a.to_json)
+            zip.add("transition-matrix.json", tensor_to_nested_array(@transition_matrix).to_json)
+            zip.add("emission-matrix.json", tensor_to_nested_array(@emission_matrix).to_json)
           end
         end
+      end
+
+      # Helper to convert 2D tensor to nested array for JSON serialization
+      private def tensor_to_nested_array(tensor : Tensor(Float64, CPU(Float64))) : Array(Array(Float64))
+        rows = tensor.shape[0]
+        cols = tensor.shape[1]
+        result = Array(Array(Float64)).new
+        rows.times do |i|
+          row = Array(Float64).new
+          cols.times do |j|
+            row << tensor[i, j].value
+          end
+          result << row
+        end
+        result
+      end
+
+      # Helper to load tensor from JSON
+      private def tensor_from_json(json : String) : Tensor(Float64, CPU(Float64))
+        arr = Array(Array(Float64)).from_json(json)
+        arr.to_tensor
+      end
+
+      # Helper to get transition matrix as nested array (for testing/compatibility)
+      def transition_matrix_to_a : Array(Array(Float64))
+        tensor_to_nested_array(@transition_matrix)
+      end
+
+      # Helper to get emission matrix as nested array (for testing/compatibility)
+      def emission_matrix_to_a : Array(Array(Float64))
+        tensor_to_nested_array(@emission_matrix)
       end
 
       def load_model(filename : String = "model.zip")
@@ -118,8 +164,8 @@ module Cadmium
             zip.each_entry do |entry|
               @observation_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "observation-space.json"
               @state_space = Set(String).from_json(entry.io.gets_to_end) if entry.filename == "state-space.json"
-              @transition_matrix = Matrix(Float64).from_json(entry.io.gets_to_end) if entry.filename == "transition-matrix.json"
-              @emission_matrix = Matrix(Float64).from_json(entry.io.gets_to_end) if entry.filename == "emission-matrix.json"
+              @transition_matrix = tensor_from_json(entry.io.gets_to_end) if entry.filename == "transition-matrix.json"
+              @emission_matrix = tensor_from_json(entry.io.gets_to_end) if entry.filename == "emission-matrix.json"
             end
           end
         end
@@ -130,17 +176,18 @@ module Cadmium
       def classify(sequence_of_observations : Array(String)) : Hash(String, String)
         @sequence_of_observations = sequence_of_observations
         @predicted_states = Array(String).new(@sequence_of_observations.size, "")
-        t1 = Matrix(Float64).build(@state_space.size, @sequence_of_observations.size) { 0.0 }
-        t2 = Matrix(Int32).build(@state_space.size, @sequence_of_observations.size) { 0 }
+        t1 = Tensor.new([@state_space.size, @sequence_of_observations.size]) { 0.0 }
+        t2 = Tensor.new([@state_space.size, @sequence_of_observations.size]) { 0 }
 
         # Calculates the initial probabilities
 
         @state_space.each_with_index do |_, i|
-          if @transition_matrix[0, i] == 0.0
+          transition_val = @transition_matrix[0, i].value
+          if transition_val == 0.0
             t1[i, 0] = -1.7976931348623157e+308
             t2[i, 0] = 0
           else
-            t1[i, 0] = Math.log(@transition_matrix[0, i]) + Math.log(@emission_matrix[i, @lookup_table.fetch(@sequence_of_observations.first, 0)])
+            t1[i, 0] = Math.log(transition_val) + Math.log(@emission_matrix[i, @lookup_table.fetch(@sequence_of_observations.first, 0)].value)
             t2[i, 0] = 0
           end
         end
@@ -150,7 +197,7 @@ module Cadmium
             best_probability = -1.7976931348623157e+308
             best_path = 0
             @state_space.each_with_index do |_, k|
-              probability = t1[k, i - 1] + Math.log(@transition_matrix[k, j]) + Math.log(@emission_matrix[j, @lookup_table.fetch(token, 0)])
+              probability = t1[k, i - 1].value + Math.log(@transition_matrix[k, j].value) + Math.log(@emission_matrix[j, @lookup_table.fetch(token, 0)].value)
               if probability > best_probability
                 best_probability = probability
                 best_path = k
@@ -162,11 +209,12 @@ module Cadmium
         end
 
         predicted_values = Array(Int32).new(@sequence_of_observations.size, 0)
-        argmax = t1[0, t1.column_count - 1]
+        argmax = t1[0, t1.shape[1] - 1].value
 
         @state_space.to_a[1..].each_with_index do |_, k|
-          if t1[k, t1.column_count - 1] > argmax
-            argmax = t1[k, t1.column_count - 1]
+          val = t1[k, t1.shape[1] - 1].value
+          if val > argmax
+            argmax = val
             predicted_values[@sequence_of_observations.size - 1] = k
           end
         end
@@ -174,7 +222,7 @@ module Cadmium
         @predicted_states[@sequence_of_observations.size - 1] = @state_space.to_a[predicted_values[@sequence_of_observations.size - 1]]
 
         @sequence_of_observations.each_with_index do |_, i|
-          predicted_values[i - 1] = t2[predicted_values[i], i]
+          predicted_values[i - 1] = t2[predicted_values[i], i].value.to_i
           @predicted_states[i - 1] = @state_space.to_a[predicted_values[i - 1]]
         end
         @sequence_of_observations.zip(@predicted_states).to_h
