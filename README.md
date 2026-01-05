@@ -1,8 +1,10 @@
 # Classifier
 
-Cadmium comes with two classifiers so far, a Classic Bayes classifier and a Viterbi classifier.
+Cadmium comes with classifiers for different types of data:
 
-Those are probabalistic classifiers that, when trained with a data set, can classify words (or other tokens) according to categories.
+- **Bayes**: Text classification using bag-of-words
+- **Viterbi**: Sequence labeling using Hidden Markov Models
+- **Tabular**: Multi-feature numerical classification (K-Nearest Neighbors, Logistic Regression)
 
 ## Installation
 
@@ -102,6 +104,123 @@ classifier.train(training_data)
 result = classifier.classify(["they", "drink", "water"])
 # => {"they" => "pronoun", "drink" => "verb", "water" => "verb"}
 ```
+
+### Tabular Classifiers
+
+Tabular classifiers work with numerical feature vectors for multi-dimensional classification tasks.
+
+#### K-Nearest Neighbors (KNN)
+
+KNN stores all training data and classifies by finding the k nearest neighbors:
+
+```crystal
+require "cadmium_classifier"
+
+classifier = Cadmium::Classifier::Tabular::KNN.new(k: 3)
+
+# Training data with 3 features per sample
+features = [
+  [1.0, 2.0, 3.0],
+  [1.1, 2.1, 3.1],
+  [5.0, 6.0, 7.0],
+]
+labels = ["class_a", "class_a", "class_b"]
+
+classifier.train(features, labels)
+
+# Predict new sample
+result = classifier.classify([1.05, 2.05, 3.05])
+# => "class_a"
+
+# Get detailed results with vote counts
+details = classifier.classify_details([1.05, 2.05, 3.05])
+# => {"class_a" => 3, "class_b" => 0}
+```
+
+**Distance Metrics:**
+
+KNN supports multiple distance metrics:
+
+```crystal
+# Euclidean (default)
+knn = Cadmium::Classifier::Tabular::KNN.new(k: 3, distance_metric: Cadmium::Classifier::Tabular::DistanceMetric::Euclidean)
+
+# Manhattan
+knn = Cadmium::Classifier::Tabular::KNN.new(k: 3, distance_metric: Cadmium::Classifier::Tabular::DistanceMetric::Manhattan)
+
+# Chebyshev
+knn = Cadmium::Classifier::Tabular::KNN.new(k: 3, distance_metric: Cadmium::Classifier::Tabular::DistanceMetric::Chebyshev)
+
+# Cosine
+knn = Cadmium::Classifier::Tabular::KNN.new(k: 3, distance_metric: Cadmium::Classifier::Tabular::DistanceMetric::Cosine)
+```
+
+#### Logistic Regression
+
+Logistic Regression uses gradient descent for binary classification with probabilistic output:
+
+```crystal
+require "cadmium_classifier"
+
+classifier = Cadmium::Classifier::Tabular::LogisticRegression.new(learning_rate: 0.01, max_iterations: 1000)
+
+features = [
+  [1.0, 2.0, 3.0],
+  [1.1, 2.1, 3.1],
+  [5.0, 6.0, 7.0],
+]
+labels = ["class_a", "class_a", "class_b"]
+
+classifier.train(features, labels)
+
+# Predict new sample
+result = classifier.classify([1.05, 2.05, 3.05])
+# => "class_a"
+
+# Get probability scores
+probs = classifier.classify_probabilities([1.05, 2.05, 3.05])
+# => {"class_a" => 85.5, "class_b" => 14.5}
+```
+
+**Saving and Loading Tabular Models:**
+
+```crystal
+# Save
+classifier.save_model("model.msgpack")
+
+# Load
+loaded = Cadmium::Classifier::Tabular::KNN.load_model("model.msgpack")
+# or
+loaded = Cadmium::Classifier::Tabular::LogisticRegression.load_model("model.msgpack")
+```
+
+#### Example: Fraud Detection
+
+```crystal
+# Features: [amount, merchant_distance, time_diff, ...]
+features = [
+  [10.50, 0.5, 1.2, 0.0, 0.0, 1.0, 0.8, 0.5, 0.1],   # legit
+  [25.00, 1.2, 0.5, 0.0, 0.0, 1.0, 0.9, 0.6, 0.2],   # legit
+  [5000.00, 150.0, 100.0, 1.0, 1.0, 0.0, 0.1, 0.2, 0.95], # fraud
+  [2500.00, 200.0, 50.0, 1.0, 1.0, 0.0, 0.15, 0.1, 0.9],  # fraud
+]
+labels = ["legit", "legit", "fraud", "fraud"]
+
+classifier = Cadmium::Classifier::Tabular::KNN.new(k: 1)
+classifier.train(features, labels)
+
+# Classify new transaction
+new_transaction = [5000.00, 180.0, 120.0, 1.0, 1.0, 0.0, 0.1, 0.2, 0.92]
+classifier.classify(new_transaction)
+# => "fraud"
+```
+
+**Important Notes:**
+
+- **Numerical features only**: Categorical features require one-hot encoding
+- **Feature scaling**: Normalize/scale features before training for better results
+- **KNN**: O(n) prediction time, suitable for small-to-medium datasets
+- **Logistic Regression**: O(1) prediction time, better for large datasets
 
 ## Contributing
 
