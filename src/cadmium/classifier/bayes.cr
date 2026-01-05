@@ -31,13 +31,11 @@ module Cadmium
     #
     # # Now let's test it on a sentence
     # classifier.classify("You shit head!")
-    # # => "angry"
+    # # => {"angry" => 85.5, "happy" => 10.2, "indifferent" => 4.3}
     #
-    # puts classifier.classify("You're the best :)")
+    # # Or just get the top category
+    # classifier.classify_category("You're the best :)")
     # # => "happy"
-    #
-    # classifier.classify("idk, my bff jill?")
-    # # => "indifferent"
     # ```
     class Bayes
       include JSON::Serializable
@@ -47,8 +45,9 @@ module Cadmium
       @[JSON::Field(ignore: true)]
       @[YAML::Field(ignore: true)]
       property tokenizer : Cadmium::Tokenizer::Base = DEFAULT_TOKENIZER
-      # The words to learn from.
-      getter vocabulary : Array(String)
+
+      # The words to learn from. Using Set for O(1) lookups instead of Array's O(n).
+      getter vocabulary : Set(String)
 
       # The total number of words in the vocabulary
       getter vocabulary_size : Int32
@@ -71,7 +70,7 @@ module Cadmium
 
       def initialize(tokenizer = nil)
         @tokenizer = tokenizer if tokenizer
-        @vocabulary = [] of String
+        @vocabulary = Set(String).new
         @vocabulary_size = 0
         @total_documents = 0
         @doc_count = {} of String => Int32
@@ -116,9 +115,8 @@ module Cadmium
         # Update our vocabulary and our word frequency count
         # for this category.
         freq_table.each do |token, frequency|
-          # Add this word to our vocabulary if it isn't already
-          # there.
-          @vocabulary << token unless vocabulary.includes?(token)
+          # Add this word to our vocabulary. Set.add handles duplicates efficiently.
+          @vocabulary.add(token)
 
           # Update the frequency information for this word in
           # this category.
@@ -139,6 +137,7 @@ module Cadmium
       end
 
       # Determines what category the `text` belongs to.
+      # Returns a Hash with all categories and their probabilities.
       def classify(text : String)
         tokens = tokenizer.tokenize(text)
         freq_table = frequency_table(tokens)
@@ -187,6 +186,21 @@ module Cadmium
             hash[prob[0]] = prob[1]
           end
         end
+      end
+
+      # Convenience method that returns just the top category name
+      # instead of all probabilities. Use this when you only need
+      # the most likely category.
+      #
+      # Example:
+      # ```
+      # classifier = Cadmium::Classifier::Bayes.new
+      # classifier.train("I love this!", "positive")
+      # classifier.train("This is terrible", "negative")
+      # classifier.classify_category("This is amazing!") # => "positive"
+      # ```
+      def classify_category(text : String) : String
+        classify(text).max_by { |_, v| v }[0]
       end
 
       # Calculate the probaility that a `token` belongs to

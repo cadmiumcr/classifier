@@ -1,6 +1,6 @@
 # Classifier
 
-Cadmium comes with two classifiers so far, a Classic Bayes classifier and a Viterbi classifier. 
+Cadmium comes with two classifiers so far, a Classic Bayes classifier and a Viterbi classifier.
 
 Those are probabalistic classifiers that, when trained with a data set, can classify words (or other tokens) according to categories.
 
@@ -18,11 +18,13 @@ Those are probabalistic classifiers that, when trained with a data set, can clas
 
 ## Usage
 
-```crystal
-require "cadmium_classifier"
-```
+### Bayes Classifier
+
+The Bayes classifier returns a hash with all categories and their probabilities (sorted from highest to lowest):
 
 ```crystal
+require "cadmium_classifier"
+
 classifier = Cadmium::Classifier::Bayes.new
 
 classifier.train("crystal is an awesome programming language", "programming")
@@ -32,10 +34,19 @@ classifier.train("my wife and I went to the beach", "off-topic")
 classifier.train("my dog likes to go outside and play", "off-topic")
 
 classifier.classify("Crystal is my favorite!")
+# => {"programming" => 91.06, "off-topic" => 8.94}
+```
+
+If you only need the top category, use `classify_category`:
+
+```crystal
+classifier.classify_category("Crystal is my favorite!")
 # => "programming"
 ```
 
-You can save the classifier as JSON as well
+#### Saving and Loading
+
+You can save the classifier as JSON:
 
 ```crystal
 require "json"
@@ -43,14 +54,44 @@ json = classifier.to_json
 File.write("classifier.json", json)
 ```
 
-And load it again later
+And load it again later:
 
 ```crystal
 require "json"
-json = File.open("classifier.json")
-classifier = classifier.from_json(json)
+json = File.read("classifier.json")
+classifier = Cadmium::Classifier::Bayes.from_json(json)
 ```
 
+Or use YAML:
+
+```crystal
+require "yaml"
+yaml = classifier.to_yaml
+File.write("classifier.yaml", yaml)
+
+# Later
+classifier = Cadmium::Classifier::Bayes.from_yaml(File.read("classifier.yaml"))
+```
+
+### Viterbi Classifier
+
+The Viterbi classifier is a Hidden Markov Model classifier:
+
+```crystal
+require "cadmium_classifier"
+
+classifier = Cadmium::Classifier::Viterbi.new
+
+training_data = [
+  {"they", "pronoun"},
+  {"drink", "verb"},
+  {"water", "verb"},
+]
+
+classifier.train(training_data)
+result = classifier.classify(["they", "drink", "water"])
+# => {"they" => "pronoun", "drink" => "verb", "water" => "verb"}
+```
 
 ## Contributing
 
