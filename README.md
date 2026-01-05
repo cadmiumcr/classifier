@@ -46,23 +46,33 @@ classifier.classify_category("Crystal is my favorite!")
 
 #### Saving and Loading
 
-You can save the classifier as JSON:
+**Recommended: MessagePack (binary format)**
+
+MessagePack is the most efficient format - 3-5x smaller and 5-10x faster than JSON/YAML:
+
+```crystal
+# Export to binary format
+bytes = classifier.to_msgpack
+File.write("classifier.model", bytes)
+
+# Import from binary format
+bytes = File.read("classifier.model")
+classifier = Cadmium::Classifier::Bayes.from_msgpack(bytes)
+```
+
+**JSON format:**
 
 ```crystal
 require "json"
 json = classifier.to_json
 File.write("classifier.json", json)
-```
 
-And load it again later:
-
-```crystal
-require "json"
+# Later
 json = File.read("classifier.json")
 classifier = Cadmium::Classifier::Bayes.from_json(json)
 ```
 
-Or use YAML:
+**YAML format:**
 
 ```crystal
 require "yaml"

@@ -155,4 +155,77 @@ describe Cadmium::Classifier::Bayes do
       restored.categories.should contain("off-topic")
     end
   end
+
+  describe "messagepack serialization and deserialization" do
+    it "exports and imports a trained set correctly" do
+      classifier = subject.new
+
+      classifier.train("crystal is an awesome programming language", "programming")
+      classifier.train("ruby is nice, but not as fast as crystal", "programming")
+      classifier.train("my wife and I went to the beach", "off-topic")
+      classifier.train("my dog likes to go outside and play", "off-topic")
+
+      # Test serialization
+      bytes = classifier.to_msgpack
+      bytes.should be_a(Bytes)
+
+      # Test deserialization
+      restored = subject.from_msgpack(bytes)
+
+      restored.total_documents.should eq(4)
+      restored.vocabulary_size.should eq(25)
+      restored.categories.should contain("programming")
+      restored.categories.should contain("off-topic")
+    end
+
+    it "preserves classification accuracy after serialization roundtrip" do
+      classifier = subject.new
+
+      classifier.train("I love this product!", "positive")
+      classifier.train("This is amazing", "positive")
+      classifier.train("I hate this", "negative")
+      classifier.train("This is terrible", "negative")
+
+      # Get original classification
+      original_result = classifier.classify("This is great!")
+
+      # Serialize and deserialize
+      bytes = classifier.to_msgpack
+      restored = subject.from_msgpack(bytes)
+
+      # Classification should be identical
+      restored_result = restored.classify("This is great!")
+
+      restored_result["positive"].should be_close(original_result["positive"], 0.001)
+      restored_result["negative"].should be_close(original_result["negative"], 0.001)
+    end
+
+    it "produces more compact output than JSON" do
+      classifier = subject.new
+
+      # Train with some data
+      100.times do
+        classifier.train("This is a sample text with some words", "category")
+      end
+
+      json_bytes = classifier.to_json.bytesize
+      msgpack_bytes = classifier.to_msgpack.bytesize
+
+      # MessagePack should be more compact
+      msgpack_bytes.should be < json_bytes
+    end
+
+    it "excludes tokenizer from serialization" do
+      custom_tokenizer = Cadmium::Tokenizer::Aggressive.new(lang: :en)
+      classifier = subject.new(tokenizer: custom_tokenizer)
+
+      classifier.train("test data here", "test")
+
+      bytes = classifier.to_msgpack
+      restored = subject.from_msgpack(bytes)
+
+      # Restored classifier should use default tokenizer
+      restored.tokenizer.should be_a(Cadmium::Tokenizer::Word)
+    end
+  end
 end

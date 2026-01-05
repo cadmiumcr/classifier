@@ -13,6 +13,8 @@ dependencies:
   apatite:
     github: watzon/apatite
     branch: master
+  msgpack:
+    github: crystal-community/msgpack-crystal
 
 development_dependencies:
   ameba:

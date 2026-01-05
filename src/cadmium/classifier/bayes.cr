@@ -1,4 +1,5 @@
 require "./classifier"
+require "msgpack"
 
 module Cadmium
   module Classifier
@@ -40,10 +41,12 @@ module Cadmium
     class Bayes
       include JSON::Serializable
       include YAML::Serializable
+      include MessagePack::Serializable
       DEFAULT_TOKENIZER = Cadmium::Tokenizer::Word.new
 
       @[JSON::Field(ignore: true)]
       @[YAML::Field(ignore: true)]
+      @[MessagePack::Field(ignore: true)]
       property tokenizer : Cadmium::Tokenizer::Base = DEFAULT_TOKENIZER
 
       # The words to learn from. Using Set for O(1) lookups instead of Array's O(n).
