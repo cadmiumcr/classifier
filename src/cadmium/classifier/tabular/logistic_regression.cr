@@ -183,7 +183,7 @@ module Cadmium
           # Map probabilities to labels
           sorted_labels = @label_classes.to_a.sort
           {
-            sorted_labels[1] => prob_positive * 100.0,  # Convert to percentage
+            sorted_labels[1] => prob_positive * 100.0, # Convert to percentage
             sorted_labels[0] => prob_negative * 100.0,
           }
         end
@@ -255,7 +255,7 @@ module Cadmium
           data = LogisticRegressionData.from_msgpack(File.read(path))
 
           # Reconstruct weights from nested array
-          weights_array = data.weights[0]  # Extract the 1D array
+          weights_array = data.weights[0] # Extract the 1D array
           n_features = weights_array.size
           weights = Tensor.new([n_features]) { |i| weights_array[i] }
 

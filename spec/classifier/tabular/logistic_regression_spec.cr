@@ -47,7 +47,7 @@ describe Cadmium::Classifier::Tabular::LogisticRegression do
     it "raises on non-binary classification" do
       lr = Cadmium::Classifier::Tabular::LogisticRegression.new
       features = [[1.0], [2.0], [3.0]]
-      labels = ["a", "b", "c"]  # 3 classes
+      labels = ["a", "b", "c"] # 3 classes
 
       expect_raises(ArgumentError, "Logistic regression requires exactly 2 classes") do
         lr.train(features, labels)
@@ -124,12 +124,12 @@ describe Cadmium::Classifier::Tabular::LogisticRegression do
 
       # Point clearly in "a" region
       probs = lr.classify_probabilities([0.0, 0.0])
-      probs["a"].should be > 50.0  # More than 50% confidence for "a"
+      probs["a"].should be > 50.0 # More than 50% confidence for "a"
       probs["b"].should be < 50.0
 
       # Point clearly in "b" region
       probs = lr.classify_probabilities([10.0, 10.0])
-      probs["b"].should be > 50.0  # More than 50% confidence for "b"
+      probs["b"].should be > 50.0 # More than 50% confidence for "b"
       probs["a"].should be < 50.0
     end
 
@@ -144,7 +144,7 @@ describe Cadmium::Classifier::Tabular::LogisticRegression do
 
       lr.train(features, labels)
 
-      probs = lr.classify_probabilities([5.0, 5.0])  # Somewhere in the middle
+      probs = lr.classify_probabilities([5.0, 5.0]) # Somewhere in the middle
       (probs["a"] + probs["b"]).should be_close(100.0, 0.01)
     end
   end
@@ -176,7 +176,7 @@ describe Cadmium::Classifier::Tabular::LogisticRegression do
       lr.train(features, labels)
 
       weights = lr.weights
-      weights.size.should eq(1)  # 1 feature
+      weights.size.should eq(1) # 1 feature
 
       bias = lr.bias
       bias.should be_a(Float64)
